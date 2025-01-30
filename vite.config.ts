@@ -25,5 +25,5 @@ export default defineConfig({
   build: {
     target: "es2020",
   },
-  base: process.env.NODE_ENV === "production" ? "/<your-repo-name>/" : "/",
+  base: process.env.NODE_ENV === "production" ? "/cybernohut/" : "/",
 });

@@ -4,14 +4,16 @@ import {
   uppercase_string,
   lowercase_string,
   remove_whitespace,
-  encode_base64,
-  decode_base64,
   encode_base16,
   decode_base16,
   encode_base32,
   decode_base32,
   encode_base85,
   decode_base85,
+  encode_base64_standard,
+  decode_base64_standard,
+  encode_base64_url,
+  decode_base64_url,
 } from "wasm";
 
 const validateOutputTypeStringToString =
@@ -68,28 +70,6 @@ export const RemoveSpaces: Operation = {
   value: "",
   func: validateOutputTypeStringToString(remove_whitespace),
   tags: [OperationTags.Text, OperationTags.All],
-  inputs: { input: IOTypes.Text },
-  outputs: { output: IOTypes.Text },
-};
-
-export const Base64Encode: Operation = {
-  name: "Base64 Encode",
-  id: "base64-encode",
-  description: "Encodes the input string to Base64",
-  value: "",
-  func: validateOutputTypeStringToString(encode_base64),
-  tags: [OperationTags.Encoding, OperationTags.All],
-  inputs: { input: IOTypes.Text },
-  outputs: { output: IOTypes.Text },
-};
-
-export const Base64Decode: Operation = {
-  name: "Base64 Decode",
-  id: "base64-decode",
-  description: "Decodes a Base64 encoded string",
-  value: "",
-  func: validateOutputTypeStringToString(decode_base64),
-  tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
 };
@@ -155,6 +135,50 @@ export const Base85Decode: Operation = {
   description: "Decodes a Base85 encoded string",
   value: "",
   func: validateOutputTypeStringToString(decode_base85),
+  tags: [OperationTags.Encoding, OperationTags.All],
+  inputs: { input: IOTypes.Text },
+  outputs: { output: IOTypes.Text },
+};
+
+export const Base64StandardEncode: Operation = {
+  name: "Base64 Standard Encode",
+  id: "base64-standard-encode",
+  description: "Encodes the input string to Base64 (standard)",
+  value: "",
+  func: validateOutputTypeStringToString(encode_base64_standard),
+  tags: [OperationTags.Encoding, OperationTags.All],
+  inputs: { input: IOTypes.Text },
+  outputs: { output: IOTypes.Text },
+};
+
+export const Base64StandardDecode: Operation = {
+  name: "Base64 Standard Decode",
+  id: "base64-standard-decode",
+  description: "Decodes a Base64 encoded string (standard)",
+  value: "",
+  func: validateOutputTypeStringToString(decode_base64_standard),
+  tags: [OperationTags.Encoding, OperationTags.All],
+  inputs: { input: IOTypes.Text },
+  outputs: { output: IOTypes.Text },
+};
+
+export const Base64UrlEncode: Operation = {
+  name: "Base64 URL-safe Encode",
+  id: "base64-url-encode",
+  description: "Encodes the input string to Base64 (URL-safe)",
+  value: "",
+  func: validateOutputTypeStringToString(encode_base64_url),
+  tags: [OperationTags.Encoding, OperationTags.All],
+  inputs: { input: IOTypes.Text },
+  outputs: { output: IOTypes.Text },
+};
+
+export const Base64UrlDecode: Operation = {
+  name: "Base64 URL-safe Decode",
+  id: "base64-url-decode",
+  description: "Decodes a Base64 encoded string (URL-safe)",
+  value: "",
+  func: validateOutputTypeStringToString(decode_base64_url),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },

@@ -22,6 +22,9 @@ image = "0.25.5"
 base64 = "0.21.0"
 data-encoding = "2.3.3"
 base85 = "1.0.0"
+md-5 = "0.10.6"
+sha1 = "0.10.6"
+sha2 = "0.10.6"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

@@ -14,6 +14,9 @@ import {
   decode_base64_standard,
   encode_base64_url,
   decode_base64_url,
+  md5,
+  sha1,
+  sha256,
 } from "wasm";
 
 const validateOutputTypeStringToString =
@@ -180,6 +183,39 @@ export const Base64UrlDecode: Operation = {
   value: "",
   func: validateOutputTypeStringToString(decode_base64_url),
   tags: [OperationTags.Encoding, OperationTags.All],
+  inputs: { input: IOTypes.Text },
+  outputs: { output: IOTypes.Text },
+};
+
+export const Md5: Operation = {
+  name: "MD5",
+  id: "md5",
+  description: "Hashes the input string using MD5",
+  value: "",
+  func: validateOutputTypeStringToString(md5),
+  tags: [OperationTags.Hashing, OperationTags.All],
+  inputs: { input: IOTypes.Text },
+  outputs: { output: IOTypes.Text },
+};
+
+export const Sha1: Operation = {
+  name: "SHA1",
+  id: "sha1",
+  description: "Hashes the input string using SHA1",
+  value: "",
+  func: validateOutputTypeStringToString(sha1),
+  tags: [OperationTags.Hashing, OperationTags.All],
+  inputs: { input: IOTypes.Text },
+  outputs: { output: IOTypes.Text },
+};
+
+export const Sha256: Operation = {
+  name: "SHA256",
+  id: "sha256",
+  description: "Hashes the input string using SHA256",
+  value: "",
+  func: validateOutputTypeStringToString(sha256),
+  tags: [OperationTags.Hashing, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
 };

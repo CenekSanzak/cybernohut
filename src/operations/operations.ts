@@ -13,6 +13,9 @@ import {
   Base64StandardDecode,
   Base64UrlEncode,
   Base64UrlDecode,
+  Md5,
+  Sha1,
+  Sha256,
 } from "./string-operations";
 import { Operation } from "./types";
 
@@ -31,4 +34,7 @@ export const operations: Operation[] = [
   Base64StandardDecode,
   Base64UrlEncode,
   Base64UrlDecode,
+  Md5,
+  Sha1,
+  Sha256,
 ];

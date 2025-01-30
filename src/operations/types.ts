@@ -3,6 +3,7 @@ export enum OperationTags {
   Text = "Text",
   BasicEncryption = "Basic Encryption",
   Encoding = "Encoding",
+  Hashing = "Hashing",
 }
 
 export enum IOTypes {
@@ -24,3 +25,4 @@ export interface Operation {
   outputs: { [key: string]: IOTypes };
   [key: string]: unknown;
 }
+

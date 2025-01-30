@@ -2,6 +2,7 @@ export enum OperationTags {
   All = "All",
   Text = "Text",
   BasicEncryption = "Basic Encryption",
+  Encoding = "Encoding",
 }
 
 export enum IOTypes {

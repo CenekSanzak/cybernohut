@@ -26,8 +26,14 @@ const InputOutput: React.FC<InputOutputProps> = ({
         />
       </div>
       <div className="flex-1 p-4 bg-gray-50">
-        <h3 className="text-lg font-semibold mb-2">
-          Output <button onClick={calculate}>Calculate</button>
+        <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+          Output{" "}
+          <button
+            onClick={calculate}
+            className="px-4 py-1 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
+          >
+            Calculate
+          </button>
         </h3>
         <Textarea
           value={output}

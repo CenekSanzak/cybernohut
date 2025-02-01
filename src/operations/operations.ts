@@ -16,7 +16,7 @@ import {
   Md5,
   Sha1,
   Sha256,
-} from "./string-operations";
+} from "./string";
 import { Operation } from "./types";
 
 export const operations: Operation[] = [

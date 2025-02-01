@@ -20,16 +20,24 @@ import {
 } from "wasm";
 
 const validateOutputTypeStringToString =
-  (func: (s: string) => string) =>
+  (
+    func: (...s: string[]) => string[],
+    inputTypes: IOTypes[],
+    outputTypes: IOTypes[]
+  ) =>
   (...args: outputTypes[]) => {
     try {
-      if (args.length !== 1) {
+      if (args.length !== inputTypes.length) {
         throw new Error("Incorrect number of arguments");
       }
-      return func(args[0] as string);
+      const function_result = func(args[0] as string);
+      if (function_result.length !== outputTypes.length) {
+        throw new Error("Incorrect number of arguments");
+      }
+      return function_result as outputTypes[];
     } catch (e) {
       console.error(e);
-      return "";
+      return [];
     }
   };
 
@@ -38,7 +46,11 @@ export const Reverse: Operation = {
   id: "reverse",
   description: "Reverses the input string",
   value: "",
-  func: validateOutputTypeStringToString(reverse_string),
+  func: validateOutputTypeStringToString(
+    reverse_string,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -49,7 +61,11 @@ export const Uppercase: Operation = {
   id: "to-uppercase",
   description: "Converts the input string to uppercase",
   value: "",
-  func: validateOutputTypeStringToString(uppercase_string),
+  func: validateOutputTypeStringToString(
+    uppercase_string,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -60,7 +76,11 @@ export const Lowercase: Operation = {
   id: "to-lowercase",
   description: "Converts the input string to lowercase",
   value: "",
-  func: validateOutputTypeStringToString(lowercase_string),
+  func: validateOutputTypeStringToString(
+    lowercase_string,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -71,30 +91,42 @@ export const RemoveSpaces: Operation = {
   id: "remove-spaces",
   description: "Removes all whitespace from the input string",
   value: "",
-  func: validateOutputTypeStringToString(remove_whitespace),
+  func: validateOutputTypeStringToString(
+    remove_whitespace,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
 };
 
 export const Base16Encode: Operation = {
-  name: "Base16 (Hex) Encode",
+  name: "Hexadecimal Encode (Base16)",
   id: "base16-encode",
   description: "Encodes the input string to Base16 (hexadecimal)",
   value: "",
-  func: validateOutputTypeStringToString(encode_base16),
-  tags: [OperationTags.Encoding, OperationTags.All],
+  func: validateOutputTypeStringToString(
+    encode_base16,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
+  tags: [OperationTags.NumberBase, OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
 };
 
 export const Base16Decode: Operation = {
-  name: "Base16 (Hex) Decode",
+  name: "Hexadecimal Decode (Base16)",
   id: "base16-decode",
   description: "Decodes a Base16 (hexadecimal) encoded string",
   value: "",
-  func: validateOutputTypeStringToString(decode_base16),
-  tags: [OperationTags.Encoding, OperationTags.All],
+  func: validateOutputTypeStringToString(
+    decode_base16,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
+  tags: [OperationTags.NumberBase, OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
 };
@@ -104,7 +136,11 @@ export const Base32Encode: Operation = {
   id: "base32-encode",
   description: "Encodes the input string to Base32",
   value: "",
-  func: validateOutputTypeStringToString(encode_base32),
+  func: validateOutputTypeStringToString(
+    encode_base32,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -115,7 +151,11 @@ export const Base32Decode: Operation = {
   id: "base32-decode",
   description: "Decodes a Base32 encoded string",
   value: "",
-  func: validateOutputTypeStringToString(decode_base32),
+  func: validateOutputTypeStringToString(
+    decode_base32,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -126,7 +166,11 @@ export const Base85Encode: Operation = {
   id: "base85-encode",
   description: "Encodes the input string to Base85",
   value: "",
-  func: validateOutputTypeStringToString(encode_base85),
+  func: validateOutputTypeStringToString(
+    encode_base85,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -137,7 +181,11 @@ export const Base85Decode: Operation = {
   id: "base85-decode",
   description: "Decodes a Base85 encoded string",
   value: "",
-  func: validateOutputTypeStringToString(decode_base85),
+  func: validateOutputTypeStringToString(
+    decode_base85,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -148,7 +196,11 @@ export const Base64StandardEncode: Operation = {
   id: "base64-standard-encode",
   description: "Encodes the input string to Base64 (standard)",
   value: "",
-  func: validateOutputTypeStringToString(encode_base64_standard),
+  func: validateOutputTypeStringToString(
+    encode_base64_standard,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -159,7 +211,11 @@ export const Base64StandardDecode: Operation = {
   id: "base64-standard-decode",
   description: "Decodes a Base64 encoded string (standard)",
   value: "",
-  func: validateOutputTypeStringToString(decode_base64_standard),
+  func: validateOutputTypeStringToString(
+    decode_base64_standard,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -170,7 +226,11 @@ export const Base64UrlEncode: Operation = {
   id: "base64-url-encode",
   description: "Encodes the input string to Base64 (URL-safe)",
   value: "",
-  func: validateOutputTypeStringToString(encode_base64_url),
+  func: validateOutputTypeStringToString(
+    encode_base64_url,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -181,7 +241,11 @@ export const Base64UrlDecode: Operation = {
   id: "base64-url-decode",
   description: "Decodes a Base64 encoded string (URL-safe)",
   value: "",
-  func: validateOutputTypeStringToString(decode_base64_url),
+  func: validateOutputTypeStringToString(
+    decode_base64_url,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -192,7 +256,11 @@ export const Md5: Operation = {
   id: "md5",
   description: "Hashes the input string using MD5",
   value: "",
-  func: validateOutputTypeStringToString(calculate_md5),
+  func: validateOutputTypeStringToString(
+    calculate_md5,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Hashing, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -203,7 +271,11 @@ export const Sha1: Operation = {
   id: "sha1",
   description: "Hashes the input string using SHA1",
   value: "",
-  func: validateOutputTypeStringToString(calculate_sha1),
+  func: validateOutputTypeStringToString(
+    calculate_sha1,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Hashing, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -214,7 +286,11 @@ export const Sha256: Operation = {
   id: "sha256",
   description: "Hashes the input string using SHA256",
   value: "",
-  func: validateOutputTypeStringToString(calculate_sha256),
+  func: validateOutputTypeStringToString(
+    calculate_sha256,
+    [IOTypes.Text],
+    [IOTypes.Text]
+  ),
   tags: [OperationTags.Hashing, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },

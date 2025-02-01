@@ -118,7 +118,7 @@ const Workspace: React.FC = () => {
           .filter((value) => value !== undefined);
 
         const calculated = operation.func.apply({}, inputValues);
-        lastValue = calculated;
+        lastValue = calculated[0];
 
         const newOutputValues: { [key: string]: outputTypes } = {};
         const outputKeys = Object.keys(

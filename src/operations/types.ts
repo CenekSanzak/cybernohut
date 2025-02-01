@@ -4,6 +4,7 @@ export enum OperationTags {
   BasicEncryption = "Basic Encryption",
   Encoding = "Encoding",
   Hashing = "Hashing",
+  NumberBase = "Number Base",
 }
 
 export enum IOTypes {
@@ -12,17 +13,20 @@ export enum IOTypes {
   Hexadecimal = "Hexadecimal",
   Binary = "Binary",
 }
+
 export type outputTypes = string | number | number[] | string[];
+
+export type OperationFunction = (...args: outputTypes[]) => outputTypes[];
+
 export interface Operation {
   name: string;
   description: string;
   value: string;
   outputValues?: { [key: string]: outputTypes };
   id: string;
-  func: (...args: outputTypes[]) => outputTypes;
+  func: OperationFunction;
   tags: OperationTags[];
   inputs: { [key: string]: IOTypes };
   outputs: { [key: string]: IOTypes };
   [key: string]: unknown;
 }
-

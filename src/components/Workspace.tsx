@@ -44,7 +44,7 @@ const Workspace: React.FC = () => {
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
 
-  const [autoCalculate, setAutoCalculate] = useState(false);
+  const [autoCalculate, setAutoCalculate] = useState(true);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 

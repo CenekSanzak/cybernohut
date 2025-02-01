@@ -28,5 +28,6 @@ export interface Operation {
   tags: OperationTags[];
   inputs: { [key: string]: IOTypes };
   outputs: { [key: string]: IOTypes };
+  link?: string;
   [key: string]: unknown;
 }

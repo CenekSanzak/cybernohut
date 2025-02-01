@@ -64,13 +64,24 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent
-                      className="bg-zinc-900 text-zinc-50 px-3 py-2 rounded-md shadow-lg border border-zinc-800"
+                      className="bg-zinc-900 text-zinc-50 px-3 py-2 rounded-md shadow-lg border border-zinc-800 max-w-sm"
                       sideOffset={5}
                       side="right"
                     >
-                      <p className="text-sm">
+                      <p className="text-sm mb-2">
                         {op.description || "No description available"}
                       </p>
+                      {op.link && (
+                        <a
+                          href={op.link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-400 hover:text-blue-300 underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          Learn more
+                        </a>
+                      )}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

@@ -3,6 +3,12 @@ import { useState } from "react";
 import { Button } from "./ui/button";
 import { type Operation, OperationTags } from "../operations/types";
 import { ChevronRight, ChevronDown } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./ui/tooltip";
 
 interface SidebarProps {
   operations: Operation[];
@@ -46,14 +52,28 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
           {expandedTags.includes(tag as OperationTags) && (
             <div className="ml-4 mt-2 space-y-2">
               {ops.map((op) => (
-                <Button
-                  key={op.id}
-                  className="w-full justify-start text-sm"
-                  variant="ghost"
-                  onClick={() => onOperationSelect(op)}
-                >
-                  {op.name}
-                </Button>
+                <TooltipProvider key={op.id}>
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <Button
+                        className="w-full justify-start text-sm"
+                        variant="ghost"
+                        onClick={() => onOperationSelect(op)}
+                      >
+                        {op.name}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      className="bg-zinc-900 text-zinc-50 px-3 py-2 rounded-md shadow-lg border border-zinc-800"
+                      sideOffset={5}
+                      side="right"
+                    >
+                      <p className="text-sm">
+                        {op.description || "No description available"}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               ))}
             </div>
           )}

@@ -43,6 +43,8 @@ const initialEdges: Edge[] = [];
 const Workspace: React.FC = () => {
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
+
+  const [autoCalculate, setAutoCalculate] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
@@ -94,7 +96,7 @@ const Workspace: React.FC = () => {
     setOutput(result);
   }, [input]);
 
-  async function calculate() {
+  const calculate = useCallback(async () => {
     try {
       const sortedNodes = topologicalSort(nodes, edges);
       let lastValue: outputTypes = "";
@@ -153,7 +155,12 @@ const Workspace: React.FC = () => {
         "Error: " + (error instanceof Error ? error.message : "Unknown error")
       );
     }
-  }
+  }, [edges, nodes, setNodes, setOutput]);
+
+  useEffect(() => {
+    if (!autoCalculate) return;
+    calculate();
+  }, [autoCalculate, calculate]);
 
   return (
     <div className="flex min-h-screen">
@@ -173,6 +180,8 @@ const Workspace: React.FC = () => {
         </div>
         <div className="w-1/3 flex flex-col">
           <InputOutput
+            autoCalculate={autoCalculate}
+            onAutoCalculateChange={setAutoCalculate}
             calculate={calculate}
             input={input}
             output={output}

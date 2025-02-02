@@ -1,11 +1,21 @@
 import { Handle, Position } from "@xyflow/react";
 import { Operation } from "@/operations/types";
 
-export const CustomNode = ({ data }: { data: Operation }) => {
+interface CustomNodeProps {
+  data: Operation;
+  selected?: boolean;
+}
+
+export const CustomNode = ({ data, selected }: CustomNodeProps) => {
   const input_length = data.inputs ? Object.keys(data.inputs).length : 0;
   const output_length = data.outputs ? Object.keys(data.outputs).length : 0;
   return (
-    <div className="p-4 border rounded shadow-md bg-white items-center">
+    <div
+      className={`p-4 border rounded shadow-md bg-white items-center cursor-pointer hover:bg-gray-50 ${
+        selected ? "border-blue-500 border-2" : ""
+      }`}
+      data-value={data.value}
+    >
       <strong>{data.name}</strong>
       {!data.inputs
         ? undefined
@@ -32,7 +42,7 @@ export const CustomNode = ({ data }: { data: Operation }) => {
               </span>
             </Handle>
           ))}
-      <div className="mt-2">{data.value}</div>
+      <div className="mt-2">{data.value?.slice(0, 30) || ""}</div>
       {!data.outputs
         ? undefined
         : Object.entries(data.outputs).map(([key, type], index) => (

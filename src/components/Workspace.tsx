@@ -43,6 +43,8 @@ const initialEdges: Edge[] = [];
 const Workspace: React.FC = () => {
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
+  const [selectedNodeId, setSelectedNodeId] = useState<string>("");
+  const [selectedNodeTitle, setSelectedNodeTitle] = useState<string>("");
 
   const [autoCalculate, setAutoCalculate] = useState(true);
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -79,6 +81,8 @@ const Workspace: React.FC = () => {
     };
     const newNodes = [...nodes, newNode];
     setNodes(newNodes);
+    setSelectedNodeId(newNode.id);
+    setSelectedNodeTitle(operation.name);
     if (nodes.length > 0) {
       const newEdge: Edge = {
         id: `${nodes.length}-${newNode.id}`,
@@ -90,11 +94,6 @@ const Workspace: React.FC = () => {
       setEdges([...edges, newEdge]);
     }
   };
-
-  useEffect(() => {
-    const result = input;
-    setOutput(result);
-  }, [input]);
 
   const calculate = useCallback(async () => {
     try {
@@ -144,14 +143,19 @@ const Workspace: React.FC = () => {
             ...node,
             data: {
               ...node.data,
-              value: calculated.toString().slice(0, 30),
+              value: calculated.toString(),
               outputValues: newOutputValues,
             },
           };
         }
       }
-
-      setOutput("" + lastValue);
+      const selectedNode = newNodes.find((n) => n.id === selectedNodeId);
+      if (selectedNode) {
+        const selectedData = selectedNode.data as Operation;
+        setOutput(selectedData.value?.toString() || "");
+      } else if (lastValue !== undefined) {
+        setOutput("" + lastValue);
+      }
       setNodes(newNodes);
     } catch (error) {
       console.error("Error during calculation:", error);
@@ -159,12 +163,61 @@ const Workspace: React.FC = () => {
         "Error: " + (error instanceof Error ? error.message : "Unknown error")
       );
     }
-  }, [edges, nodes, setNodes, setOutput]);
+  }, [edges, nodes, setNodes, selectedNodeId]);
 
   useEffect(() => {
     if (!autoCalculate) return;
     calculate();
   }, [autoCalculate, calculate]);
+
+  const handleNodeClick = useCallback(
+    (value: string, nodeId: string) => {
+      setOutput(value);
+      setSelectedNodeId(nodeId);
+      const node = nodes.find((n) => n.id === nodeId);
+      if (node) {
+        const nodeData = node.data as Operation;
+        setSelectedNodeTitle(nodeData.name);
+      }
+    },
+    [nodes]
+  );
+
+  const handleNodesDelete = useCallback(
+    (deleted: Node[], remainingNodes: Node[], newEdges: Edge[]) => {
+      if (deleted.some((node) => node.id === selectedNodeId)) {
+        if (remainingNodes.length > 0) {
+          try {
+            const sortedNodes = topologicalSort(remainingNodes, newEdges);
+            const lastNode = sortedNodes[sortedNodes.length - 1];
+
+            if (lastNode) {
+              const nodeData = lastNode.data as Operation;
+              setSelectedNodeId(lastNode.id);
+              setSelectedNodeTitle(nodeData.name);
+              setOutput(nodeData.value?.toString() || "");
+            } else {
+              setSelectedNodeId("");
+              setSelectedNodeTitle("");
+              setOutput("");
+            }
+          } catch (error) {
+            console.error("Error in topological sort:", error);
+            const lastNode = remainingNodes[remainingNodes.length - 1];
+            const nodeData = lastNode.data as Operation;
+            setSelectedNodeId(lastNode.id);
+            setSelectedNodeTitle(nodeData.name);
+            setOutput(nodeData.value?.toString() || "");
+          }
+        } else {
+          setSelectedNodeId("");
+          setSelectedNodeTitle("");
+          setOutput("");
+        }
+      }
+    },
+    [selectedNodeId]
+  );
 
   return (
     <div className="flex min-h-screen">
@@ -181,6 +234,8 @@ const Workspace: React.FC = () => {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodeClick={handleNodeClick}
+            onNodesDelete={handleNodesDelete}
           />
         </div>
         <div className="w-1/3 flex flex-col">
@@ -191,6 +246,8 @@ const Workspace: React.FC = () => {
             input={input}
             output={output}
             onInputChange={handleInputChange}
+            selectedNodeId={selectedNodeId}
+            selectedNodeTitle={selectedNodeTitle}
           />
         </div>
       </div>

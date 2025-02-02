@@ -10,6 +10,8 @@ interface InputOutputProps {
   calculate: () => void;
   autoCalculate: boolean;
   onAutoCalculateChange: (checked: boolean) => void;
+  selectedNodeId?: string;
+  selectedNodeTitle?: string;
 }
 
 const InputOutput: React.FC<InputOutputProps> = ({
@@ -19,6 +21,8 @@ const InputOutput: React.FC<InputOutputProps> = ({
   calculate,
   autoCalculate,
   onAutoCalculateChange,
+  selectedNodeId,
+  selectedNodeTitle,
 }) => {
   return (
     <div className="flex flex-col h-full">
@@ -53,6 +57,11 @@ const InputOutput: React.FC<InputOutputProps> = ({
             </button>
           </div>
         </h3>
+        {selectedNodeId && (
+          <div className="text-sm text-gray-500 mb-2">
+            {selectedNodeTitle} ({selectedNodeId}):
+          </div>
+        )}
         <Textarea
           value={output}
           readOnly

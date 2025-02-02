@@ -25,6 +25,12 @@ type OperationGraphProps = {
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (params: Connection) => void;
+  onNodeClick?: (value: string, nodeId: string) => void;
+  onNodesDelete?: (
+    deleted: Node[],
+    remainingNodes: Node[],
+    newEdges: Edge[]
+  ) => void;
 };
 const nodeTypes = { custom: CustomNode };
 
@@ -35,32 +41,39 @@ const OperationGraph: React.FC<OperationGraphProps> = ({
   onNodesChange,
   onEdgesChange,
   onConnect,
+  onNodeClick,
+  onNodesDelete,
 }) => {
-  const onNodesDelete = useCallback(
+  const onNodesDeleteInternal = useCallback(
     (deleted: Node[]) => {
-      setEdges(
-        deleted.reduce((acc, node) => {
-          const incomers = getIncomers(node, nodes, edges);
-          const outgoers = getOutgoers(node, nodes, edges);
-          const connectedEdges = getConnectedEdges([node], edges);
-
-          const remainingEdges = acc.filter(
-            (edge) => !connectedEdges.includes(edge)
-          );
-
-          const createdEdges = incomers.flatMap(({ id: source }) =>
-            outgoers.map(({ id: target }) => ({
-              id: `${source}->${target}`,
-              source,
-              target,
-            }))
-          );
-
-          return [...remainingEdges, ...createdEdges];
-        }, edges)
+      const remainingNodes = nodes.filter(
+        (node) => !deleted.some((del) => del.id === node.id)
       );
+
+      const newEdges = deleted.reduce((acc, node) => {
+        const incomers = getIncomers(node, nodes, edges);
+        const outgoers = getOutgoers(node, nodes, edges);
+        const connectedEdges = getConnectedEdges([node], edges);
+
+        const remainingEdges = acc.filter(
+          (edge) => !connectedEdges.includes(edge)
+        );
+
+        const createdEdges = incomers.flatMap(({ id: source }) =>
+          outgoers.map(({ id: target }) => ({
+            id: `${source}->${target}`,
+            source,
+            target,
+          }))
+        );
+
+        return [...remainingEdges, ...createdEdges];
+      }, edges);
+
+      setEdges(newEdges);
+      onNodesDelete?.(deleted, remainingNodes, newEdges);
     },
-    [setEdges, edges, nodes]
+    [setEdges, edges, nodes, onNodesDelete]
   );
 
   const isValidConnection = (connection: Edge | Connection) => {
@@ -90,6 +103,15 @@ const OperationGraph: React.FC<OperationGraphProps> = ({
     const targetHandle = targetData.inputs?.[connection.targetHandle];
     return sourceHandle === targetHandle;
   };
+
+  const handleNodeClick = useCallback(
+    (event: React.MouseEvent, node: Node) => {
+      const nodeData = node.data as Operation;
+      onNodeClick?.(nodeData.value?.toString() || "", node.id);
+    },
+    [onNodeClick]
+  );
+
   return (
     <div className="h-full overflow-y-auto">
       <h2 className="text-xl font-bold mb-4">Selected Operations</h2>
@@ -102,7 +124,8 @@ const OperationGraph: React.FC<OperationGraphProps> = ({
           nodeTypes={nodeTypes}
           onConnect={onConnect}
           isValidConnection={isValidConnection}
-          onNodesDelete={onNodesDelete}
+          onNodesDelete={onNodesDeleteInternal}
+          onNodeClick={handleNodeClick}
         >
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
           <Controls />

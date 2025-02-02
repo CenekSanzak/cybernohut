@@ -4,6 +4,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Node } from "@xyflow/react";
 import { Operation, OperationTags } from "@/operations/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface InputOutputProps {
   input: string;
@@ -76,21 +82,49 @@ const InputOutput = React.memo<InputOutputProps>(
             Output{" "}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
-                <Checkbox
-                  id="auto-calculate"
-                  checked={autoCalculate}
-                  onCheckedChange={onAutoCalculateChange}
-                />
-                <Label htmlFor="auto-calculate" className="text-sm font-normal">
-                  Auto-calculate
-                </Label>
+                <TooltipProvider>
+                  <Tooltip delayDuration={100}>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id="auto-calculate"
+                          checked={autoCalculate}
+                          onCheckedChange={onAutoCalculateChange}
+                        />
+                        <Label
+                          htmlFor="auto-calculate"
+                          className="text-sm font-normal"
+                        >
+                          Auto-calculate
+                        </Label>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-zinc-900 text-zinc-50 px-3 py-2 rounded-md shadow-lg border border-zinc-800 max-w-sm">
+                      Automatically calculates the output whenever the input
+                      changes. It should be disabled if the calculation is too
+                      slow or heavy for the system.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
-              <button
-                onClick={calculate}
-                className="px-4 py-1 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
-              >
-                Calculate
-              </button>
+              {!autoCalculate && (
+                <TooltipProvider>
+                  <Tooltip delayDuration={100}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={calculate}
+                        className="px-4 py-1 bg-blue-500 text-white rounded-full hover:bg-blue-600 transition-colors"
+                      >
+                        Calculate
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-zinc-900 text-zinc-50 px-3 py-2 rounded-md shadow-lg border border-zinc-800 max-w-sm">
+                      Click to manually calculate the output based on the
+                      current input. Unnecessary if auto-calculate is enabled.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             </div>
           </h3>
           {selectedNodeId && (

@@ -40,6 +40,9 @@ const initialNodes: Node[] = [
 
 const initialEdges: Edge[] = [];
 
+const generateShortId = (prefix: string) =>
+  `${prefix}-${Math.random().toString(36).slice(2, 7)}`;
+
 const Workspace: React.FC = () => {
   const [input, setInput] = useState("");
   const [output, setOutput] = useState("");
@@ -67,14 +70,14 @@ const Workspace: React.FC = () => {
   };
 
   const handleOperationSelect = (operation: Operation) => {
-    console.log(operation);
     const max_y = Math.max(
       ...nodes.map((node) => node.position.y + (node.measured?.height || 0))
     );
     const avg_x =
       nodes.reduce((acc, node) => acc + node.position.x, 0) / nodes.length;
+
     const newNode: Node = {
-      id: operation.id + nodes.length,
+      id: generateShortId(operation.id),
       type: "custom",
       data: operation,
       position: { x: avg_x, y: 80 + max_y },

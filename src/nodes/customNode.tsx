@@ -2,11 +2,12 @@ import { Handle, Position } from "@xyflow/react";
 import { Operation } from "@/operations/types";
 
 interface CustomNodeProps {
+  id: string;
   data: Operation;
   selected?: boolean;
 }
 
-export const CustomNode = ({ data, selected }: CustomNodeProps) => {
+export const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
   const input_length = data.inputs ? Object.keys(data.inputs).length : 0;
   const output_length = data.outputs ? Object.keys(data.outputs).length : 0;
   return (
@@ -16,7 +17,10 @@ export const CustomNode = ({ data, selected }: CustomNodeProps) => {
       }`}
       data-value={data.value}
     >
-      <strong>{data.name}</strong>
+      <div>
+        <strong>{data.name}</strong>
+        <div className="text-[10px] text-gray-400 -mt-1">{id}</div>
+      </div>
       {!data.inputs
         ? undefined
         : Object.entries(data.inputs).map(([key, type], index) => (

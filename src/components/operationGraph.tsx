@@ -126,6 +126,7 @@ const OperationGraph: React.FC<OperationGraphProps> = ({
           isValidConnection={isValidConnection}
           onNodesDelete={onNodesDeleteInternal}
           onNodeClick={handleNodeClick}
+          fitView
         >
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
           <Controls />

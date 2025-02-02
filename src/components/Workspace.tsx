@@ -144,7 +144,7 @@ const Workspace: React.FC = () => {
             ...node,
             data: {
               ...node.data,
-              value: calculated,
+              value: calculated.toString().slice(0, 30),
               outputValues: newOutputValues,
             },
           };

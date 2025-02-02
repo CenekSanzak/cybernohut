@@ -148,7 +148,7 @@ const Workspace: React.FC = () => {
         const inputValues: outputTypes[] = state.edges
           .filter((edge) => edge.target === node.id)
           .map((edge) => {
-            const sourceNode = state.nodes.find((n) => n.id === edge.source);
+            const sourceNode = newNodes.find((n) => n.id === edge.source);
             if (!sourceNode) return undefined;
             const sourceData = sourceNode?.data as Operation;
             const outputValues = sourceData.outputValues;

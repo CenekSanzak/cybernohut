@@ -312,7 +312,6 @@ const Workspace: React.FC = () => {
     dispatch({ type: "APPLY_EDGE_CHANGES", changes });
   }, []);
 
-  // Memoize props
   const graphProps = useMemo(
     () => ({
       setEdges: (edges: Edge[]) => dispatch({ type: "SET_EDGES", edges }),

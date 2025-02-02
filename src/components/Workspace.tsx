@@ -28,7 +28,7 @@ import {
 } from "@/nodes/topological-sort";
 import { checkInputNodeExists } from "@/nodes/utils";
 import { Input } from "@/operations/io";
-import { debounce } from "lodash";
+import { debounce, isEqual } from "lodash";
 import { graphReducer, initialGraphState } from "@/state/graphReducer";
 import { ErrorBoundary } from "./ErrorBoundary";
 
@@ -139,7 +139,6 @@ const Workspace: React.FC = () => {
       const newNodes = [...state.nodes];
       const calculationOrder = topologicalSort(state.nodes, state.edges);
       let hasChanges = false;
-
       for (const node of calculationOrder) {
         if (!node.data) continue;
         const operation = node.data as Operation;
@@ -182,7 +181,8 @@ const Workspace: React.FC = () => {
               outputValues: newOutputValues,
             },
           };
-          if (JSON.stringify(newNodes[nodeIndex]) !== JSON.stringify(newNode)) {
+
+          if (!isEqual(operation.outputValues, newOutputValues)) {
             newNodes[nodeIndex] = newNode;
             hasChanges = true;
           }

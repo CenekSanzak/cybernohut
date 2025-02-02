@@ -122,7 +122,7 @@ const Workspace: React.FC = () => {
             return outputValues[edge.sourceHandle || "output"];
           })
           .filter((value) => value !== undefined);
-
+        if (inputValues.length === 0) continue;
         const calculated = operation.func.apply({}, inputValues);
         lastValue = calculated[0];
 

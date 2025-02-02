@@ -17,9 +17,11 @@ import {
   Sha1,
   Sha256,
 } from "./string";
+import { Input } from "./io";
 import { Operation } from "./types";
 
 export const operations: Operation[] = [
+  Input,
   Reverse,
   RemoveSpaces,
   Lowercase,

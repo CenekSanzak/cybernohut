@@ -51,6 +51,26 @@ npm run dev
 npm run build
 ```
 
+### Building the Rust WebAssembly Part
+
+You need to have [Rust](https://www.rust-lang.org/tools/install) installed.
+
+```bash
+
+# Install wasm-pack
+cargo install wasm-pack
+
+# Go to wasm directory
+cd wasm
+
+# Build the wasm module (No target because the default is loader (like webpack))
+wasm-pack build 
+
+# Go back to the root directory
+cd ..
+
+```
+
 ## Tech Stack
 
 - **Frontend**: React 18 with TypeScript

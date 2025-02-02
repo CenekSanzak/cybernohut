@@ -43,7 +43,7 @@ const InputOutput = React.memo<InputOutputProps>(
 
     return (
       <div className="flex flex-col h-full">
-        <div className="flex-1 p-4">
+        <div className="h-1/2 p-4">
           <h3 className="text-lg font-semibold mb-2">Input</h3>
           {inputNodes.length > 0 && (
             <div className="flex gap-2 mb-2">
@@ -67,11 +67,11 @@ const InputOutput = React.memo<InputOutputProps>(
             onChange={(e) =>
               onInputChange(e.target.value, selectedInputId || "input-node")
             }
-            className="w-full h-full min-h-[200px]"
+            className="w-full h-[calc(100%-4rem)]"
             placeholder="Enter your input here..."
           />
         </div>
-        <div className="flex-1 p-4 bg-gray-50">
+        <div className="h-1/2 p-4 bg-gray-50">
           <h3 className="text-lg font-semibold mb-2 flex items-center gap-4">
             Output{" "}
             <div className="flex items-center gap-4">
@@ -101,7 +101,7 @@ const InputOutput = React.memo<InputOutputProps>(
           <Textarea
             value={output}
             readOnly
-            className="w-full h-full min-h-[200px] bg-white"
+            className="w-full h-[calc(100%-4rem)] bg-white"
             placeholder="Output will appear here..."
           />
         </div>

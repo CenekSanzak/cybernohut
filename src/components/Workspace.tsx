@@ -141,13 +141,18 @@ const Workspace: React.FC = () => {
 
       let lastValue: outputTypes = "";
       const newNodes = [...state.nodes];
-      const calculationOrder = topologicalSort(state.nodes, state.edges);
+      const calculationOrder = topologicalSort(state.nodes, state.edges).filter(
+        (node) => state.dirtyNodes.has(node.id)
+      );
+      if (calculationOrder.length === 0) return;
+      console.log("will calculate for ", calculationOrder.length, "nodes");
       let hasChanges = false;
       for (const node of calculationOrder) {
         if (!node.data) continue;
         const operation = node.data as Operation;
         if (!operation.inputs || Object.keys(operation.inputs).length === 0)
           continue;
+
         const inputValues: outputTypes[] = state.edges
           .filter((edge) => edge.target === node.id)
           .map((edge) => {
@@ -159,7 +164,9 @@ const Workspace: React.FC = () => {
             return outputValues[edge.sourceHandle || "output"];
           })
           .filter((value) => value !== undefined);
+
         if (inputValues.length === 0) continue;
+
         const calculated = operation.func.apply({}, inputValues);
         lastValue = calculated[0];
 
@@ -205,7 +212,10 @@ const Workspace: React.FC = () => {
       }
 
       if (hasChanges) {
-        dispatch({ type: "SET_NODES", nodes: newNodes });
+        dispatch({
+          type: "SET_NODES_AND_CLEAR_DIRTY",
+          nodes: newNodes,
+        });
       }
     } catch (error) {
       console.error("Error during calculation:", error);
@@ -216,7 +226,7 @@ const Workspace: React.FC = () => {
           (error instanceof Error ? error.message : "Unknown error"),
       });
     }
-  }, [state.nodes, state.edges, state.selectedNodeId]);
+  }, [state.nodes, state.edges, state.selectedNodeId, state.dirtyNodes]);
 
   const debouncedCalculate = useMemo(
     () => debounce(calculate, 250),

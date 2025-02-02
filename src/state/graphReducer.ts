@@ -7,6 +7,10 @@ import {
   NodeChange,
   EdgeChange,
 } from "@xyflow/react";
+import {
+  getAffectedNodesFromEdgeChanges,
+  getDownstreamNodes,
+} from "@/nodes/utils";
 
 export type GraphState = {
   nodes: Node[];
@@ -16,6 +20,7 @@ export type GraphState = {
   input: string;
   output: string;
   selectedNodeTitle: string;
+  dirtyNodes: Set<string>;
 };
 
 export type GraphAction =
@@ -30,7 +35,8 @@ export type GraphAction =
   | { type: "DELETE_NODES"; nodeIds: string[] }
   | { type: "APPLY_NODE_CHANGES"; changes: NodeChange[] }
   | { type: "APPLY_EDGE_CHANGES"; changes: EdgeChange[] }
-  | { type: "SET_EDGES_AND_NODES"; edges: Edge[]; nodes: Node[] };
+  | { type: "SET_EDGES_AND_NODES"; edges: Edge[]; nodes: Node[] }
+  | { type: "SET_NODES_AND_CLEAR_DIRTY"; nodes: Node[] };
 
 export const initialGraphState: GraphState = {
   nodes: [],
@@ -40,6 +46,7 @@ export const initialGraphState: GraphState = {
   input: "",
   output: "",
   selectedNodeTitle: "",
+  dirtyNodes: new Set<string>(),
 };
 
 export const graphReducer = (
@@ -50,8 +57,17 @@ export const graphReducer = (
     case "SET_NODES":
       return { ...state, nodes: action.nodes };
 
-    case "SET_EDGES":
-      return { ...state, edges: action.edges };
+    case "SET_EDGES": {
+      const changedNodes = getAffectedNodesFromEdgeChanges(
+        state.edges,
+        action.edges
+      );
+      return {
+        ...state,
+        edges: action.edges,
+        dirtyNodes: new Set([...state.dirtyNodes, ...changedNodes]),
+      };
+    }
 
     case "SELECT_NODE":
       return {
@@ -75,14 +91,22 @@ export const graphReducer = (
     case "SET_OUTPUT":
       return { ...state, output: action.value };
 
-    case "ADD_NODE":
+    case "ADD_NODE": {
+      const newNodeId = action.node.id;
       return {
         ...state,
         nodes: [...state.nodes, action.node],
         edges: action.edge ? [...state.edges, action.edge] : state.edges,
+        dirtyNodes: new Set([
+          ...state.dirtyNodes,
+          newNodeId,
+          ...(action.edge ? [action.edge.target] : []),
+        ]),
       };
+    }
 
-    case "UPDATE_NODE_VALUE":
+    case "UPDATE_NODE_VALUE": {
+      const affectedNodes = getDownstreamNodes(state.edges, action.nodeId);
       return {
         ...state,
         nodes: state.nodes.map((node) =>
@@ -97,7 +121,9 @@ export const graphReducer = (
               }
             : node
         ),
+        dirtyNodes: new Set([...state.dirtyNodes, ...affectedNodes]),
       };
+    }
 
     case "DELETE_NODES":
       return {
@@ -122,6 +148,13 @@ export const graphReducer = (
         ...state,
         edges: action.edges,
         nodes: action.nodes,
+      };
+
+    case "SET_NODES_AND_CLEAR_DIRTY":
+      return {
+        ...state,
+        nodes: action.nodes,
+        dirtyNodes: new Set(),
       };
 
     default:

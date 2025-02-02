@@ -2,17 +2,16 @@
 
 import type React from "react";
 import { useState, useEffect, useCallback } from "react";
-import Sidebar from "./Sidebar";
-
-import InputOutput from "./InputOutput";
-import OperationGraph from "./operationGraph";
+import Sidebar from "@/components/Sidebar";
+import InputOutput from "@/components/InputOutput";
+import OperationGraph from "@/components/operationGraph";
 import {
   IOTypes,
   Operation,
   OperationTags,
   outputTypes,
-} from "../operations/types";
-import { operations } from "../operations/operations";
+} from "@/operations/types";
+import { operations } from "@/operations/operations";
 import {
   Edge,
   useNodesState,
@@ -21,7 +20,8 @@ import {
   addEdge,
   Node,
 } from "@xyflow/react";
-import { topologicalSort } from "../nodes/topological-sort";
+import { topologicalSort } from "@/nodes/topological-sort";
+import { checkInputNodeExists } from "@/nodes/utils";
 
 const initialNodes: Node[] = [
   {
@@ -98,6 +98,10 @@ const Workspace: React.FC = () => {
 
   const calculate = useCallback(async () => {
     try {
+      if (!checkInputNodeExists(nodes)) {
+        setOutput("Error: Input node not found");
+        return;
+      }
       const sortedNodes = topologicalSort(nodes, edges);
       let lastValue: outputTypes = "";
       const newNodes = [...nodes];
@@ -171,6 +175,7 @@ const Workspace: React.FC = () => {
       <div className="flex-1 flex">
         <div className="w-2/3 p-4 border-r">
           <OperationGraph
+            setEdges={setEdges}
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}

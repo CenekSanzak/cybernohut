@@ -1,4 +1,4 @@
-import { Operation, OperationTags, IOTypes } from "../types";
+import { Operation, OperationTags, IOTypes } from "@/operations/types";
 import {
   encode_base16,
   decode_base16,
@@ -11,7 +11,7 @@ import {
   encode_base64_url,
   decode_base64_url,
 } from "wasm";
-import { validateOutputTypeStringToString } from "./utils";
+import { validateOutputTypeStringToString } from "@/operations/string/utils";
 
 export const Base16Encode: Operation = {
   name: "Hexadecimal Encode (Base16)",

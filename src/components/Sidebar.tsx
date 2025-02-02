@@ -1,14 +1,14 @@
 import type React from "react";
 import { useState } from "react";
-import { Button } from "./ui/button";
-import { type Operation, OperationTags } from "../operations/types";
+import { Button } from "@/components/ui/button";
+import { type Operation, OperationTags } from "@/operations/types";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "./ui/tooltip";
+} from "@/components/ui/tooltip";
 
 interface SidebarProps {
   operations: Operation[];

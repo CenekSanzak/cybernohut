@@ -1,5 +1,5 @@
 import { Handle, Position } from "@xyflow/react";
-import { Operation } from "../operations/types";
+import { Operation } from "@/operations/types";
 
 export const CustomNode = ({ data }: { data: Operation }) => {
   const input_length = data.inputs ? Object.keys(data.inputs).length : 0;

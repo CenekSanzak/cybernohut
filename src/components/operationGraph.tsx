@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   ReactFlow,
   Edge,
@@ -10,14 +10,18 @@ import {
   BackgroundVariant,
   Connection,
   OnEdgesChange,
+  getConnectedEdges,
+  getIncomers,
+  getOutgoers,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { CustomNode } from "../nodes/customNode";
-import { Operation } from "../operations/types";
+import { CustomNode } from "@/nodes/customNode";
+import { Operation } from "@/operations/types";
 
 type OperationGraphProps = {
   nodes: Node[];
   edges: Edge[];
+  setEdges: React.Dispatch<React.SetStateAction<Edge[]>>;
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (params: Connection) => void;
@@ -27,10 +31,38 @@ const nodeTypes = { custom: CustomNode };
 const OperationGraph: React.FC<OperationGraphProps> = ({
   nodes,
   edges,
+  setEdges,
   onNodesChange,
   onEdgesChange,
   onConnect,
 }) => {
+  const onNodesDelete = useCallback(
+    (deleted: Node[]) => {
+      setEdges(
+        deleted.reduce((acc, node) => {
+          const incomers = getIncomers(node, nodes, edges);
+          const outgoers = getOutgoers(node, nodes, edges);
+          const connectedEdges = getConnectedEdges([node], edges);
+
+          const remainingEdges = acc.filter(
+            (edge) => !connectedEdges.includes(edge)
+          );
+
+          const createdEdges = incomers.flatMap(({ id: source }) =>
+            outgoers.map(({ id: target }) => ({
+              id: `${source}->${target}`,
+              source,
+              target,
+            }))
+          );
+
+          return [...remainingEdges, ...createdEdges];
+        }, edges)
+      );
+    },
+    [setEdges, edges, nodes]
+  );
+
   const isValidConnection = (connection: Edge | Connection) => {
     if (
       !connection.source ||
@@ -70,6 +102,7 @@ const OperationGraph: React.FC<OperationGraphProps> = ({
           nodeTypes={nodeTypes}
           onConnect={onConnect}
           isValidConnection={isValidConnection}
+          onNodesDelete={onNodesDelete}
         >
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
           <Controls />

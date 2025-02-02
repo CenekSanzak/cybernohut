@@ -1,6 +1,6 @@
-import { Operation, OperationTags, IOTypes } from "../types";
+import { Operation, OperationTags, IOTypes } from "@/operations/types";
 import { calculate_md5, calculate_sha1, calculate_sha256 } from "wasm";
-import { validateOutputTypeStringToString } from "./utils";
+import { validateOutputTypeStringToString } from "@/operations/string/utils";
 
 export const Md5: Operation = {
   name: "MD5",

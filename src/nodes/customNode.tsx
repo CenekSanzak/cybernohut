@@ -13,7 +13,6 @@ export const CustomNode = React.memo<CustomNodeProps>(
     const input_length = data.inputs ? Object.keys(data.inputs).length : 0;
     const output_length = data.outputs ? Object.keys(data.outputs).length : 0;
 
-    // Memoize input handles
     const inputHandles = useMemo(() => {
       if (!data.inputs) return null;
       return Object.entries(data.inputs).map(([key, type], index) => (
@@ -38,7 +37,6 @@ export const CustomNode = React.memo<CustomNodeProps>(
       ));
     }, [data.inputs, input_length]);
 
-    // Memoize output handles
     const outputHandles = useMemo(() => {
       if (!data.outputs) return null;
       return Object.entries(data.outputs).map(([key, type], index) => (

@@ -32,7 +32,6 @@ import { debounce } from "lodash";
 import { graphReducer, initialGraphState } from "@/state/graphReducer";
 import { ErrorBoundary } from "./ErrorBoundary";
 
-// Components
 import Sidebar from "@/components/Sidebar";
 import InputOutput from "@/components/InputOutput";
 import OperationGraph from "@/components/operationGraph";
@@ -139,8 +138,7 @@ const Workspace: React.FC = () => {
       let lastValue: outputTypes = "";
       const newNodes = [...state.nodes];
       const calculationOrder = topologicalSort(state.nodes, state.edges);
-      console.log("calculating", calculationOrder);
-      let hasChanges = false; // Track if we actually made any changes
+      let hasChanges = false;
 
       for (const node of calculationOrder) {
         if (!node.data) continue;
@@ -202,7 +200,6 @@ const Workspace: React.FC = () => {
         dispatch({ type: "SET_OUTPUT", value: lastValue.toString() });
       }
 
-      // Only dispatch if we actually made changes
       if (hasChanges) {
         dispatch({ type: "SET_NODES", nodes: newNodes });
       }
@@ -218,14 +215,13 @@ const Workspace: React.FC = () => {
   }, [state.nodes, state.edges, state.selectedNodeId]);
 
   const debouncedCalculate = useMemo(
-    () => debounce(calculate, 100),
+    () => debounce(calculate, 250),
     [calculate]
   );
 
   useEffect(() => {
     if (!autoCalculate) return;
     debouncedCalculate();
-    // Cleanup
     return () => {
       debouncedCalculate.cancel();
     };
@@ -295,7 +291,6 @@ const Workspace: React.FC = () => {
     [state.selectedNodeId, state.selectedInputId]
   );
 
-  // Update node changes to use dispatch
   const handleNodesChange = useCallback((changes: NodeChange[]) => {
     dispatch({ type: "APPLY_NODE_CHANGES", changes });
   }, []);

@@ -105,7 +105,7 @@ const OperationGraph: React.FC<OperationGraphProps> = ({
   };
 
   const handleNodeClick = useCallback(
-    (event: React.MouseEvent, node: Node) => {
+    (_event: React.MouseEvent, node: Node) => {
       const nodeData = node.data as Operation;
       onNodeClick?.(nodeData.value?.toString() || "", node.id);
     },

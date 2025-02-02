@@ -13,7 +13,7 @@ import {
   IsValidConnection,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { CustomNode } from "@/nodes/customNode";
+import { MemoizedCustomNode } from "@/nodes/customNode";
 
 interface FlowGraphProps {
   nodes: Node[];
@@ -30,7 +30,7 @@ interface FlowGraphProps {
   ) => void;
 }
 
-const nodeTypes = { custom: CustomNode };
+const nodeTypes = { custom: MemoizedCustomNode };
 
 export const FlowGraph = React.memo<FlowGraphProps>(
   ({

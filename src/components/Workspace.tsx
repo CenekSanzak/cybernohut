@@ -70,63 +70,67 @@ const Workspace: React.FC = () => {
     [state.edges]
   );
 
-  const handleInputChange = (value: string, nodeId: string) => {
+  const handleInputChange = useCallback((value: string, nodeId: string) => {
     dispatch({ type: "SET_INPUT", value });
     dispatch({ type: "UPDATE_NODE_VALUE", nodeId, value });
-  };
+  }, []);
 
   const handleInputTabSelect = useCallback((nodeId: string) => {
     dispatch({ type: "SELECT_INPUT", nodeId });
   }, []);
 
-  const handleOperationSelect = (operation: Operation) => {
-    const connectedNodes = getConnectedNodesFromInput(
-      state.selectedInputId,
-      state.nodes,
-      state.edges
-    );
-    const sortedConnectedNodes = topologicalSort(connectedNodes, state.edges);
+  const handleOperationSelect = useCallback(
+    (operation: Operation) => {
+      const connectedNodes = getConnectedNodesFromInput(
+        state.selectedInputId,
+        state.nodes,
+        state.edges
+      );
+      const sortedConnectedNodes = topologicalSort(connectedNodes, state.edges);
 
-    const lastConnectedNode =
-      sortedConnectedNodes[sortedConnectedNodes.length - 1];
+      const lastConnectedNode =
+        sortedConnectedNodes[sortedConnectedNodes.length - 1];
 
-    const lastNodeY = lastConnectedNode
-      ? lastConnectedNode.position.y + (lastConnectedNode.measured?.height || 0)
-      : 0;
-    const lastNodeX = lastConnectedNode ? lastConnectedNode.position.x : 250;
+      const lastNodeY = lastConnectedNode
+        ? lastConnectedNode.position.y +
+          (lastConnectedNode.measured?.height || 0)
+        : 0;
+      const lastNodeX = lastConnectedNode ? lastConnectedNode.position.x : 250;
 
-    const newNode: Node = {
-      id: generateShortId(operation.id),
-      type: "custom",
-      data: operation,
-      position: { x: lastNodeX, y: lastNodeY + 80 },
-    };
+      const newNode: Node = {
+        id: generateShortId(operation.id),
+        type: "custom",
+        data: operation,
+        position: { x: lastNodeX, y: lastNodeY + 80 },
+      };
 
-    if (operation.tags.includes(OperationTags.IO)) {
-      dispatch({ type: "ADD_NODE", node: newNode });
-      dispatch({ type: "SELECT_INPUT", nodeId: newNode.id });
-    } else {
-      const newEdge =
-        lastConnectedNode &&
-        operation.inputs &&
-        Object.keys(operation.inputs).length > 0
-          ? {
-              id: `${lastConnectedNode.id}-${newNode.id}`,
-              source: lastConnectedNode.id,
-              sourceHandle: "output",
-              target: newNode.id,
-              targetHandle: "input",
-            }
-          : undefined;
+      if (operation.tags.includes(OperationTags.IO)) {
+        dispatch({ type: "ADD_NODE", node: newNode });
+        dispatch({ type: "SELECT_INPUT", nodeId: newNode.id });
+      } else {
+        const newEdge =
+          lastConnectedNode &&
+          operation.inputs &&
+          Object.keys(operation.inputs).length > 0
+            ? {
+                id: `${lastConnectedNode.id}-${newNode.id}`,
+                source: lastConnectedNode.id,
+                sourceHandle: "output",
+                target: newNode.id,
+                targetHandle: "input",
+              }
+            : undefined;
 
-      dispatch({ type: "ADD_NODE", node: newNode, edge: newEdge });
-      dispatch({
-        type: "SELECT_NODE",
-        nodeId: newNode.id,
-        nodeTitle: operation.name,
-      });
-    }
-  };
+        dispatch({ type: "ADD_NODE", node: newNode, edge: newEdge });
+        dispatch({
+          type: "SELECT_NODE",
+          nodeId: newNode.id,
+          nodeTitle: operation.name,
+        });
+      }
+    },
+    [state.selectedInputId, state.nodes, state.edges]
+  );
 
   const calculate = useCallback(async () => {
     try {
@@ -250,8 +254,7 @@ const Workspace: React.FC = () => {
           (node.data as Operation).tags.includes(OperationTags.IO)
         );
         if (remainingInputNodes.length > 0) {
-          const firstInputNode = remainingInputNodes[0];
-          dispatch({ type: "SELECT_INPUT", nodeId: firstInputNode.id });
+          dispatch({ type: "SELECT_INPUT", nodeId: remainingInputNodes[0].id });
         } else {
           dispatch({ type: "SELECT_INPUT", nodeId: "input-node" });
         }
@@ -299,13 +302,69 @@ const Workspace: React.FC = () => {
     dispatch({ type: "APPLY_EDGE_CHANGES", changes });
   }, []);
 
+  // Memoize props
+  const graphProps = useMemo(
+    () => ({
+      setEdges: (edges: Edge[]) => dispatch({ type: "SET_EDGES", edges }),
+      nodes: state.nodes,
+      edges: state.edges,
+      onNodesChange: handleNodesChange,
+      onEdgesChange: handleEdgesChange,
+      onConnect,
+      onNodeClick: handleNodeClick,
+      onNodesDelete: handleNodesDelete,
+    }),
+    [
+      state.nodes,
+      state.edges,
+      handleNodesChange,
+      handleEdgesChange,
+      onConnect,
+      handleNodeClick,
+      handleNodesDelete,
+    ]
+  );
+
+  const inputOutputProps = useMemo(
+    () => ({
+      autoCalculate,
+      onAutoCalculateChange: setAutoCalculate,
+      calculate,
+      input: state.input,
+      output: state.output,
+      onInputChange: handleInputChange,
+      selectedNodeId: state.selectedNodeId,
+      selectedNodeTitle: state.selectedNodeTitle,
+      nodes: state.nodes,
+      selectedInputId: state.selectedInputId,
+      onInputTabSelect: handleInputTabSelect,
+    }),
+    [
+      autoCalculate,
+      calculate,
+      state.input,
+      state.output,
+      state.selectedNodeId,
+      state.selectedNodeTitle,
+      state.nodes,
+      state.selectedInputId,
+      handleInputChange,
+      handleInputTabSelect,
+    ]
+  );
+
+  const sidebarProps = useMemo(
+    () => ({
+      operations,
+      onOperationSelect: handleOperationSelect,
+    }),
+    [handleOperationSelect]
+  );
+
   return (
     <div className="flex min-h-screen">
       <ErrorBoundary>
-        <Sidebar
-          operations={operations}
-          onOperationSelect={handleOperationSelect}
-        />
+        <Sidebar {...sidebarProps} />
       </ErrorBoundary>
       <div className="flex-1 flex">
         <div className="w-2/3 p-4 border-r">
@@ -314,33 +373,12 @@ const Workspace: React.FC = () => {
               console.error("Graph error:", error);
             }}
           >
-            <OperationGraph
-              setEdges={(edges) => dispatch({ type: "SET_EDGES", edges })}
-              nodes={state.nodes}
-              edges={state.edges}
-              onNodesChange={handleNodesChange}
-              onEdgesChange={handleEdgesChange}
-              onConnect={onConnect}
-              onNodeClick={handleNodeClick}
-              onNodesDelete={handleNodesDelete}
-            />
+            <OperationGraph {...graphProps} />
           </ErrorBoundary>
         </div>
         <div className="w-1/3 flex flex-col">
           <ErrorBoundary>
-            <InputOutput
-              autoCalculate={autoCalculate}
-              onAutoCalculateChange={setAutoCalculate}
-              calculate={calculate}
-              input={state.input}
-              output={state.output}
-              onInputChange={handleInputChange}
-              selectedNodeId={state.selectedNodeId}
-              selectedNodeTitle={state.selectedNodeTitle}
-              nodes={state.nodes}
-              selectedInputId={state.selectedInputId}
-              onInputTabSelect={handleInputTabSelect}
-            />
+            <InputOutput {...inputOutputProps} />
           </ErrorBoundary>
         </div>
       </div>
@@ -348,4 +386,4 @@ const Workspace: React.FC = () => {
   );
 };
 
-export default Workspace;
+export default React.memo(Workspace);

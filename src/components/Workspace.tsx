@@ -145,7 +145,6 @@ const Workspace: React.FC = () => {
         (node) => state.dirtyNodes.has(node.id)
       );
       if (calculationOrder.length === 0) return;
-      console.log("will calculate for ", calculationOrder.length, "nodes");
       let hasChanges = false;
       for (const node of calculationOrder) {
         if (!node.data) continue;

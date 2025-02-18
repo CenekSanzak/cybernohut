@@ -16,7 +16,9 @@ import {
   Md5,
   Sha1,
   Sha256,
+  SliceText,
 } from "./string";
+import { CaesarCipher, ROT13 } from "./cipher";
 import { Input } from "./io";
 import { Operation } from "./types";
 
@@ -39,4 +41,7 @@ export const operations: Operation[] = [
   Md5,
   Sha1,
   Sha256,
+  CaesarCipher,
+  ROT13,
+  SliceText,
 ];

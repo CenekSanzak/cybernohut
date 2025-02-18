@@ -6,6 +6,7 @@ export enum OperationTags {
   Hashing = "Hashing",
   NumberBase = "Number Base",
   IO = "I/O",
+  SubstitutionCipher = "Substitution Cipher",
 }
 
 export enum IOTypes {

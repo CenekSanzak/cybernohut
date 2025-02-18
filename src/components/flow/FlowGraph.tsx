@@ -71,7 +71,7 @@ export const FlowGraph = React.memo<FlowGraphProps>(
           isValidConnection={isValidConnection}
           onNodesDelete={handleNodesDelete}
           onNodeClick={(_, node) => onNodeClick?.(node.id)}
-          fitView
+          defaultViewport={{ x: 0, y: 0, zoom: 1.2 }}
           proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />

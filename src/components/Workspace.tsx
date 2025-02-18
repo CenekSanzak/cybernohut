@@ -20,6 +20,7 @@ import {
   OperationTags,
   outputTypes,
   IOTypes,
+  ConfigValues,
 } from "@/operations/types";
 import { operations } from "@/operations/operations";
 import {
@@ -87,21 +88,32 @@ const Workspace: React.FC = () => {
         state.edges
       );
       const sortedConnectedNodes = topologicalSort(connectedNodes, state.edges);
-
       const lastConnectedNode =
         sortedConnectedNodes[sortedConnectedNodes.length - 1];
-
-      const lastNodeY = lastConnectedNode
-        ? lastConnectedNode.position.y +
-          (lastConnectedNode.measured?.height || 0)
-        : 0;
-      const lastNodeX = lastConnectedNode ? lastConnectedNode.position.x : 250;
 
       const newNode: Node = {
         id: generateShortId(operation.id),
         type: "custom",
-        data: operation,
-        position: { x: lastNodeX, y: lastNodeY + 80 },
+        data: {
+          ...operation,
+          onConfigChange: (newConfig: ConfigValues) => {
+            if (operation.funcBuilder) {
+              dispatch({
+                type: "UPDATE_NODE_CONFIG",
+                nodeId: newNode.id,
+                config: newConfig,
+              });
+            }
+          },
+        },
+        position: {
+          x: lastConnectedNode ? lastConnectedNode.position.x : 250,
+          y: lastConnectedNode
+            ? lastConnectedNode.position.y +
+              (lastConnectedNode.measured?.height || 0) +
+              80
+            : 10,
+        },
       };
 
       if (operation.tags.includes(OperationTags.IO)) {
@@ -228,7 +240,7 @@ const Workspace: React.FC = () => {
   }, [state.nodes, state.edges, state.selectedNodeId, state.dirtyNodes]);
 
   const debouncedCalculate = useMemo(
-    () => debounce(calculate, 250),
+    () => debounce(calculate, 100),
     [calculate]
   );
 

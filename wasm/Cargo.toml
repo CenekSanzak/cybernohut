@@ -25,6 +25,8 @@ base85 = "1.0.0"
 md-5 = "0.10.6"
 sha1 = "0.10.6"
 sha2 = "0.10.6"
+serde_json = "1.0.138"
+js-sys = "0.3.77"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

@@ -15,6 +15,10 @@ export enum IOTypes {
   Binary = "Binary",
 }
 
+export type ConfigValues = {
+  [key: string]: string | number | boolean;
+};
+
 export type outputTypes = string | number | number[] | string[];
 
 export type OperationFunction = (...args: outputTypes[]) => outputTypes[];
@@ -24,11 +28,14 @@ export interface Operation {
   description: string;
   value: string;
   outputValues?: { [key: string]: outputTypes };
+  configValues?: ConfigValues;
   id: string;
+  funcBuilder?: (configValues?: ConfigValues) => OperationFunction;
   func: OperationFunction;
   tags: OperationTags[];
   inputs: { [key: string]: IOTypes };
   outputs: { [key: string]: IOTypes };
   link?: string;
+  onConfigChange?: (newConfig: ConfigValues) => void;
   [key: string]: unknown;
 }

@@ -1,12 +1,32 @@
 use wasm_bindgen::prelude::*;
 use base64::{Engine as _, engine::general_purpose};
-use data_encoding::{HEXLOWER as BASE16, BASE32};
+use data_encoding::{HEXLOWER as BASE16, BASE32, HEXUPPER};
 use base85::{encode, decode};
 use crate::utils::process_lines;
+use serde_json::Value;
+use wasm_bindgen::JsValue;
 
 #[wasm_bindgen]
 pub fn encode_base16(s: &str) -> Vec<String> {
     vec![process_lines(s, |line| BASE16.encode(line.as_bytes()))]
+}
+
+#[wasm_bindgen]
+pub fn build_base16_encoder(config: &str) -> Result<js_sys::Function, JsValue> {
+    let config: Value = serde_json::from_str(config)
+        .map_err(|e| JsValue::from_str(&format!("Invalid config JSON: {}", e)))?;
+    
+    let uppercase = config.get("uppercase")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    
+    let encoder = if uppercase { HEXUPPER } else { BASE16 };
+    
+    let closure: Closure<dyn Fn(String) -> Vec<String>> = Closure::new(move |s: String| {
+        vec![process_lines(&s, |line| encoder.encode(line.as_bytes()))]
+    });
+    
+    Ok(closure.into_js_value().unchecked_into::<js_sys::Function>())
 }
 
 #[wasm_bindgen]

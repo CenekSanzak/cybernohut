@@ -1,4 +1,4 @@
-import { Operation } from "@/operations/types";
+import { ConfigValues, Operation } from "@/operations/types";
 import {
   Edge,
   Node,
@@ -36,7 +36,8 @@ export type GraphAction =
   | { type: "APPLY_NODE_CHANGES"; changes: NodeChange[] }
   | { type: "APPLY_EDGE_CHANGES"; changes: EdgeChange[] }
   | { type: "SET_EDGES_AND_NODES"; edges: Edge[]; nodes: Node[] }
-  | { type: "SET_NODES_AND_CLEAR_DIRTY"; nodes: Node[] };
+  | { type: "SET_NODES_AND_CLEAR_DIRTY"; nodes: Node[] }
+  | { type: "UPDATE_NODE_CONFIG"; nodeId: string; config: ConfigValues };
 
 export const initialGraphState: GraphState = {
   nodes: [],
@@ -156,6 +157,34 @@ export const graphReducer = (
         nodes: action.nodes,
         dirtyNodes: new Set(),
       };
+
+    case "UPDATE_NODE_CONFIG": {
+      const node = state.nodes.find((n) => n.id === action.nodeId);
+      const operation = node?.data as Operation;
+      const funcBuilder = operation?.funcBuilder;
+      if (typeof funcBuilder !== "function") return state;
+
+      const newNodes = state.nodes.map((node) =>
+        node.id === action.nodeId
+          ? {
+              ...node,
+              data: {
+                ...node.data,
+                configValues: action.config,
+                func: funcBuilder(action.config),
+              },
+            }
+          : node
+      );
+
+      const affectedNodes = getDownstreamNodes(state.edges, action.nodeId);
+      affectedNodes.push(action.nodeId);
+      return {
+        ...state,
+        nodes: newNodes,
+        dirtyNodes: new Set([...state.dirtyNodes, ...affectedNodes]),
+      };
+    }
 
     default:
       return state;

@@ -72,6 +72,7 @@ export const FlowGraph = React.memo<FlowGraphProps>(
           onNodesDelete={handleNodesDelete}
           onNodeClick={(_, node) => onNodeClick?.(node.id)}
           fitView
+          proOptions={{ hideAttribution: true }}
         >
           <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
           <Controls />

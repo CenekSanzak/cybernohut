@@ -1,4 +1,9 @@
-import { Operation, OperationTags, IOTypes } from "@/operations/types";
+import {
+  Operation,
+  OperationTags,
+  IOTypes,
+  ConfigValues,
+} from "@/operations/types";
 import {
   encode_base16,
   decode_base16,
@@ -10,6 +15,7 @@ import {
   decode_base64_standard,
   encode_base64_url,
   decode_base64_url,
+  build_base16_encoder,
 } from "wasm";
 import { validateOutputTypeStringToString } from "@/operations/string/utils";
 
@@ -19,6 +25,17 @@ export const Base16Encode: Operation = {
   description: "Encodes the input string to Base16 (hexadecimal)",
   link: "https://en.wikipedia.org/wiki/Hexadecimal",
   value: "",
+  configValues: {
+    uppercase: false,
+  },
+  funcBuilder: (config?: ConfigValues) => {
+    const builtFunction = build_base16_encoder(JSON.stringify(config || {}));
+    return validateOutputTypeStringToString(
+      (input: string) => builtFunction(input),
+      [IOTypes.Text],
+      [IOTypes.Text]
+    );
+  },
   func: validateOutputTypeStringToString(
     encode_base16,
     [IOTypes.Text],

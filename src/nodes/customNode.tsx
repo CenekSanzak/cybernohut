@@ -16,14 +16,14 @@ const propsAreEqual = (
     prevProps.id === nextProps.id &&
     prevProps.selected === nextProps.selected &&
     prevProps.data.value === nextProps.data.value &&
-    prevProps.data.outputValues === nextProps.data.outputValues
+    prevProps.data.outputValues === nextProps.data.outputValues &&
+    prevProps.data.configValues === nextProps.data.configValues
   );
 };
 
 const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
   const input_length = data.inputs ? Object.keys(data.inputs).length : 0;
   const output_length = data.outputs ? Object.keys(data.outputs).length : 0;
-
   const inputHandles = useMemo(() => {
     if (!data.inputs) return null;
     return Object.entries(data.inputs).map(([key, type], index) => (
@@ -75,6 +75,61 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
     ));
   }, [data.outputs, output_length]);
 
+  const configInputs = useMemo(() => {
+    if (!data.configValues) return null;
+    return (
+      <div className="mt-2 border-t pt-2">
+        {Object.entries(data.configValues).map(([key, value]) => (
+          <div key={key} className="flex items-center text-xs">
+            <label className="mr-2">{key}:</label>
+            {typeof value === "boolean" ? (
+              <input
+                type="checkbox"
+                checked={value}
+                onChange={(e) => {
+                  if (data.onConfigChange) {
+                    data.onConfigChange({
+                      ...data.configValues,
+                      [key]: e.target.checked,
+                    });
+                  }
+                }}
+              />
+            ) : typeof value === "number" ? (
+              <input
+                type="number"
+                value={value}
+                onChange={(e) => {
+                  if (data.onConfigChange) {
+                    data.onConfigChange({
+                      ...data.configValues,
+                      [key]: Number(e.target.value),
+                    });
+                  }
+                }}
+                className="w-16 px-1"
+              />
+            ) : (
+              <input
+                type="text"
+                value={value}
+                onChange={(e) => {
+                  if (data.onConfigChange) {
+                    data.onConfigChange({
+                      ...data.configValues,
+                      [key]: e.target.value,
+                    });
+                  }
+                }}
+                className="w-24 px-1"
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  }, [data]);
+
   const nodeClassName = useMemo(
     () =>
       `p-4 border rounded shadow-md bg-white items-center cursor-pointer hover:bg-gray-50 ${
@@ -91,6 +146,7 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
       </div>
       {inputHandles}
       <div className="mt-2">{data.value?.slice(0, 30) || ""}</div>
+      {configInputs}
       {outputHandles}
     </div>
   );

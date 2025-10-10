@@ -17,7 +17,10 @@ import {
   decode_base64_url,
   build_base16_encoder,
 } from "wasm";
-import { validateOutputTypeStringToString } from "@/operations/string/utils";
+import {
+  wasmTextToText,
+  wasmTextToTextWithConfig,
+} from "@/operations/wasm-adapter";
 
 export const Base16Encode: Operation = {
   name: "Hexadecimal Encode (Base16)",
@@ -29,22 +32,16 @@ export const Base16Encode: Operation = {
     uppercase: false,
   },
   funcBuilder: (config?: ConfigValues) => {
-    const builtFunction = build_base16_encoder(JSON.stringify(config || {}));
-    return validateOutputTypeStringToString(
-      (input: string) => builtFunction(input),
-      [IOTypes.Text],
-      [IOTypes.Text]
+    return wasmTextToTextWithConfig(
+      build_base16_encoder as (config: string) => (input: string) => string[],
+      config || {},
+      "text"
     );
   },
-  func: validateOutputTypeStringToString(
-    encode_base16,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
-  cleanup: () => {
-    // WASM closures are automatically cleaned up by the garbage collector
-    // This is a placeholder for any manual cleanup if needed
-  },
+  func: wasmTextToText(encode_base16),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
+  cleanup: () => {},
   tags: [OperationTags.NumberBase, OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -56,11 +53,9 @@ export const Base16Decode: Operation = {
   description: "Decodes a Base16 (hexadecimal) encoded string",
   link: "https://en.wikipedia.org/wiki/Hexadecimal",
   value: "",
-  func: validateOutputTypeStringToString(
-    decode_base16,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(decode_base16),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.NumberBase, OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -72,11 +67,9 @@ export const Base32Encode: Operation = {
   description: "Encodes the input string to Base32",
   link: "https://en.wikipedia.org/wiki/Base32",
   value: "",
-  func: validateOutputTypeStringToString(
-    encode_base32,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(encode_base32),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -88,11 +81,9 @@ export const Base32Decode: Operation = {
   description: "Decodes a Base32 encoded string",
   link: "https://en.wikipedia.org/wiki/Base32",
   value: "",
-  func: validateOutputTypeStringToString(
-    decode_base32,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(decode_base32),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -104,11 +95,9 @@ export const Base85Encode: Operation = {
   description: "Encodes the input string to Base85",
   link: "https://en.wikipedia.org/wiki/Ascii85",
   value: "",
-  func: validateOutputTypeStringToString(
-    encode_base85,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(encode_base85),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -120,11 +109,9 @@ export const Base85Decode: Operation = {
   description: "Decodes a Base85 encoded string",
   link: "https://en.wikipedia.org/wiki/Ascii85",
   value: "",
-  func: validateOutputTypeStringToString(
-    decode_base85,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(decode_base85),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -136,11 +123,9 @@ export const Base64StandardEncode: Operation = {
   description: "Encodes the input string to Base64 (standard)",
   link: "https://en.wikipedia.org/wiki/Base64",
   value: "",
-  func: validateOutputTypeStringToString(
-    encode_base64_standard,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(encode_base64_standard),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -152,11 +137,9 @@ export const Base64StandardDecode: Operation = {
   description: "Decodes a Base64 encoded string (standard)",
   link: "https://en.wikipedia.org/wiki/Base64",
   value: "",
-  func: validateOutputTypeStringToString(
-    decode_base64_standard,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(decode_base64_standard),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -168,11 +151,9 @@ export const Base64UrlEncode: Operation = {
   description: "Encodes the input string to Base64 (URL-safe)",
   link: "https://en.wikipedia.org/wiki/Base64#URL_applications",
   value: "",
-  func: validateOutputTypeStringToString(
-    encode_base64_url,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(encode_base64_url),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -184,11 +165,9 @@ export const Base64UrlDecode: Operation = {
   description: "Decodes a Base64 encoded string (URL-safe)",
   link: "https://en.wikipedia.org/wiki/Base64#URL_applications",
   value: "",
-  func: validateOutputTypeStringToString(
-    decode_base64_url,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(decode_base64_url),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },

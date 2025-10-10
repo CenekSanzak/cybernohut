@@ -20,15 +20,24 @@ export type ConfigValues = {
   [key: string]: string | number | boolean;
 };
 
-export type outputTypes = string | number | number[] | string[];
+export type DataValue =
+  | { type: "text"; value: string }
+  | { type: "number"; value: number }
+  | { type: "binary"; value: Uint8Array }
+  | { type: "text_array"; value: string[] }
+  | { type: "number_array"; value: number[] };
 
-export type OperationFunction = (...args: outputTypes[]) => outputTypes[];
+export type OperationFunction =
+  | { signature: "single"; func: (input: DataValue) => DataValue[] }
+  | { signature: "multi"; func: (inputs: DataValue[]) => DataValue[] };
+
+export type outputTypes = string | number | number[] | string[];
 
 export interface Operation {
   name: string;
   description: string;
   value: string;
-  outputValues?: { [key: string]: outputTypes };
+  outputValues?: { [key: string]: DataValue };
   configValues?: ConfigValues;
   id: string;
   funcBuilder?: (configValues?: ConfigValues) => OperationFunction;
@@ -36,6 +45,8 @@ export interface Operation {
   tags: OperationTags[];
   inputs: { [key: string]: IOTypes };
   outputs: { [key: string]: IOTypes };
+  inputTypes: DataValue[];
+  outputTypes: DataValue[];
   link?: string;
   onConfigChange?: (newConfig: ConfigValues) => void;
   cleanup?: () => void;

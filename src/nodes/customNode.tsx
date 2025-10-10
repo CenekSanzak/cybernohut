@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Handle, Position } from "@xyflow/react";
 import { Operation, OperationTags } from "@/operations/types";
+import { formatDataValueForDisplay } from "@/operations/execution";
 
 interface CustomNodeProps {
   id: string;
@@ -32,7 +33,11 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
         type="target"
         position={Position.Top}
         id={key}
-        style={{ background: "red" }}
+        style={{
+          background: "red",
+          left: `${+(50 / input_length + (100 / input_length) * index)}%`,
+          textAlign: "center",
+        }}
         aria-label={`Input ${key} of type ${type}`}
       >
         <span
@@ -41,13 +46,14 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
             transform: "translate(-50%, -110%)",
             fontSize: "10px",
             left: `${+(50 / input_length + (100 / input_length) * index)}%`,
+            color: data.inputTypes?.[index] ? "#2563eb" : "#6b7280",
           }}
         >
-          {key} ({type})
+          {key} ({data.inputTypes?.[index]?.type || type})
         </span>
       </Handle>
     ));
-  }, [data.inputs, input_length]);
+  }, [data.inputs, input_length, data.inputTypes]);
 
   const outputHandles = useMemo(() => {
     if (!data.outputs) return null;
@@ -69,13 +75,14 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
             position: "absolute",
             transform: "translate(-50%, 20%)",
             fontSize: "10px",
+            color: data.outputTypes?.[index] ? "#2563eb" : "#6b7280",
           }}
         >
-          {key} ({type})
+          {key} ({data.outputTypes?.[index]?.type || type})
         </span>
       </Handle>
     ));
-  }, [data.outputs, output_length]);
+  }, [data.outputs, output_length, data.outputTypes]);
 
   const configInputs = useMemo(() => {
     if (!data.configValues) return null;
@@ -157,7 +164,26 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
         )}
       </div>
       {inputHandles}
-      <div className="mt-2">{data.value?.slice(0, 30) || ""}</div>
+      <div className="mt-2 text-xs">
+        {/* For Input nodes, show the input value instead of output */}
+        {data.id === "input" ? (
+          <div className="text-gray-600">
+            {data.value?.slice(0, 30) || "No input"}
+            {data.value && data.value.length > 30 && "..."}
+          </div>
+        ) : data.outputValues ? (
+          Object.entries(data.outputValues).map(([key, value]) => (
+            <div key={key} className="mb-1">
+              <span className="font-medium">{key}:</span>{" "}
+              <span className="text-gray-600">
+                {formatDataValueForDisplay(value)}
+              </span>
+            </div>
+          ))
+        ) : (
+          data.value?.slice(0, 30) || ""
+        )}
+      </div>
       {configInputs}
       {outputHandles}
     </div>

@@ -19,9 +19,16 @@ import {
   Operation,
   OperationTags,
   outputTypes,
-  IOTypes,
   ConfigValues,
+  DataValue,
 } from "@/operations/types";
+import {
+  executeOperation,
+  validateOperationInputs,
+  createDataValueOutputValues,
+  getOperationDisplayValue,
+  getOperationFullOutput,
+} from "@/operations/execution";
 import { operations } from "@/operations/operations";
 import {
   topologicalSort,
@@ -129,7 +136,7 @@ const Workspace: React.FC = () => {
                 source: lastConnectedNode.id,
                 sourceHandle: "output",
                 target: newNode.id,
-                targetHandle: "input",
+                targetHandle: Object.keys(operation.inputs)[0],
               }
             : undefined;
 
@@ -153,7 +160,6 @@ const Workspace: React.FC = () => {
         return;
       }
 
-      let lastValue: outputTypes = "";
       const newNodes = [...state.nodes];
       const calculationOrder = topologicalSort(state.nodes, state.edges).filter(
         (node) => state.dirtyNodes.has(node.id)
@@ -161,7 +167,6 @@ const Workspace: React.FC = () => {
       if (calculationOrder.length === 0) return;
       let hasChanges = false;
 
-      // Clear previous errors
       for (const node of calculationOrder) {
         dispatch({ type: "CLEAR_ERROR", nodeId: node.id });
       }
@@ -169,11 +174,42 @@ const Workspace: React.FC = () => {
       for (const node of calculationOrder) {
         if (!node.data) continue;
         const operation = node.data as Operation;
+
+        if (operation.id === "input") {
+          const inputValue = operation.value || "";
+          const calculated = executeOperation(operation, [
+            { type: "text", value: inputValue },
+          ]);
+          const newOutputValues = createDataValueOutputValues(
+            operation,
+            calculated
+          );
+
+          const nodeIndex = newNodes.findIndex((n) => n.id === node.id);
+          if (nodeIndex !== -1) {
+            const newNode = {
+              ...node,
+              data: {
+                ...node.data,
+                value: getOperationDisplayValue(operation),
+                outputValues: newOutputValues,
+                error: undefined,
+              },
+            };
+
+            if (!isEqual(operation.outputValues, newOutputValues)) {
+              newNodes[nodeIndex] = newNode;
+              hasChanges = true;
+            }
+          }
+          continue;
+        }
+
         if (!operation.inputs || Object.keys(operation.inputs).length === 0)
           continue;
 
         try {
-          const inputValues: outputTypes[] = state.edges
+          const inputValues: (outputTypes | DataValue)[] = state.edges
             .filter((edge) => edge.target === node.id)
             .map((edge) => {
               const sourceNode = newNodes.find((n) => n.id === edge.source);
@@ -183,24 +219,27 @@ const Workspace: React.FC = () => {
               if (!outputValues) return undefined;
               return outputValues[edge.sourceHandle || "output"];
             })
-            .filter((value) => value !== undefined);
+            .filter((value) => value !== undefined) as (
+            | outputTypes
+            | DataValue
+          )[];
 
           if (inputValues.length === 0) continue;
 
-          const calculated = operation.func.apply({}, inputValues);
-          lastValue = calculated[0];
-
-          const newOutputValues: { [key: string]: outputTypes } = {};
-          const outputKeys = Object.keys(
-            operation.outputs as { [key: string]: IOTypes }
+          validateOperationInputs(
+            operation,
+            inputValues as (outputTypes | DataValue)[]
           );
 
-          for (let index = 0; index < outputKeys.length; index++) {
-            const key = outputKeys[index];
-            newOutputValues[key] = Array.isArray(calculated)
-              ? calculated[index]
-              : calculated;
-          }
+          const calculated = executeOperation(
+            operation,
+            inputValues as (outputTypes | DataValue)[]
+          );
+
+          const newOutputValues = createDataValueOutputValues(
+            operation,
+            calculated
+          );
 
           const nodeIndex = newNodes.findIndex((n) => n.id === node.id);
           if (nodeIndex !== -1) {
@@ -208,7 +247,7 @@ const Workspace: React.FC = () => {
               ...node,
               data: {
                 ...node.data,
-                value: calculated.toString(),
+                value: getOperationDisplayValue(operation),
                 outputValues: newOutputValues,
                 error: undefined,
               },
@@ -243,10 +282,8 @@ const Workspace: React.FC = () => {
         const selectedData = selectedNode.data as Operation;
         dispatch({
           type: "SET_OUTPUT",
-          value: selectedData.value?.toString() || "",
+          value: getOperationFullOutput(selectedData),
         });
-      } else if (lastValue !== undefined) {
-        dispatch({ type: "SET_OUTPUT", value: lastValue.toString() });
       }
 
       if (hasChanges) {
@@ -281,10 +318,8 @@ const Workspace: React.FC = () => {
     };
   }, [autoCalculate, debouncedCalculate]);
 
-  // Cleanup WASM closures on unmount
   useEffect(() => {
     return () => {
-      // Cleanup all node closures
       state.nodes.forEach((node) => {
         const operation = node.data as Operation;
         if (operation?.cleanup) {
@@ -294,22 +329,18 @@ const Workspace: React.FC = () => {
     };
   }, []);
 
-  // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Ctrl/Cmd + S to save (placeholder for future implementation)
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
         event.preventDefault();
         console.log("Save functionality not yet implemented");
       }
 
-      // Ctrl/Cmd + Z for undo (placeholder for future implementation)
       if ((event.ctrlKey || event.metaKey) && event.key === "z") {
         event.preventDefault();
         console.log("Undo functionality not yet implemented");
       }
 
-      // Escape to clear selection
       if (event.key === "Escape") {
         dispatch({ type: "SELECT_NODE", nodeId: "", nodeTitle: "" });
       }
@@ -337,7 +368,6 @@ const Workspace: React.FC = () => {
 
   const handleNodesDelete = useCallback(
     (deleted: Node[], remainingNodes: Node[], newEdges: Edge[]) => {
-      // Cleanup WASM closures for deleted nodes
       deleted.forEach((node) => {
         const operation = node.data as Operation;
         if (operation?.cleanup) {

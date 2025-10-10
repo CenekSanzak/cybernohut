@@ -1,6 +1,6 @@
 import { Operation, OperationTags, IOTypes } from "@/operations/types";
 import { build_caesar_cipher } from "wasm";
-import { validateOutputTypeStringToString } from "../string/utils";
+import { wasmTextToTextWithConfig } from "@/operations/wasm-adapter";
 
 export const CaesarCipher: Operation = {
   name: "Caesar Cipher",
@@ -12,22 +12,20 @@ export const CaesarCipher: Operation = {
     knownPart: "",
   },
   funcBuilder: (config) => {
-    const builtFunction = build_caesar_cipher(JSON.stringify(config || {}));
-    return validateOutputTypeStringToString(
-      (input: string) => builtFunction(input),
-      [IOTypes.Text],
-      [IOTypes.Text]
+    return wasmTextToTextWithConfig(
+      build_caesar_cipher as (config: string) => (input: string) => string[],
+      config || {},
+      "text"
     );
   },
-  func: validateOutputTypeStringToString(
-    (input: string) => build_caesar_cipher(JSON.stringify({}))(input),
-    [IOTypes.Text],
-    [IOTypes.Text]
+  func: wasmTextToTextWithConfig(
+    build_caesar_cipher as (config: string) => (input: string) => string[],
+    {},
+    "text"
   ),
-  cleanup: () => {
-    // WASM closures are automatically cleaned up by the garbage collector
-    // This is a placeholder for any manual cleanup if needed
-  },
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
+  cleanup: () => {},
   tags: [
     OperationTags.Text,
     OperationTags.All,

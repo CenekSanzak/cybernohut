@@ -5,7 +5,14 @@ export const Input: Operation = {
   description: "Input node for providing data",
   id: "input",
   value: "",
-  func: () => [],
+  func: {
+    signature: "single",
+    func: (input) => {
+      return [{ type: "text", value: String(input.value) }];
+    },
+  },
+  inputTypes: [],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.IO, OperationTags.All],
   inputs: {},
   outputs: { output: IOTypes.Text },

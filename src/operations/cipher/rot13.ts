@@ -1,6 +1,6 @@
 import { Operation, OperationTags, IOTypes } from "@/operations/types";
 import { build_caesar_cipher } from "wasm";
-import { validateOutputTypeStringToString } from "../string/utils";
+import { wasmTextToTextWithConfig } from "@/operations/wasm-adapter";
 
 export const ROT13: Operation = {
   name: "ROT13",
@@ -8,12 +8,13 @@ export const ROT13: Operation = {
   description:
     "Apply ROT13 substitution cipher (Caesar cipher with shift of 13)",
   value: "",
-  func: validateOutputTypeStringToString(
-    (input: string) =>
-      build_caesar_cipher(JSON.stringify({ shift: 13 }))(input),
-    [IOTypes.Text],
-    [IOTypes.Text]
+  func: wasmTextToTextWithConfig(
+    build_caesar_cipher as (config: string) => (input: string) => string[],
+    { shift: 13 },
+    "text"
   ),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [
     OperationTags.Text,
     OperationTags.All,

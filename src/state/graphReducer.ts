@@ -21,6 +21,8 @@ export type GraphState = {
   output: string;
   selectedNodeTitle: string;
   dirtyNodes: Set<string>;
+  errors: Map<string, string>;
+  isCalculating: boolean;
 };
 
 export type GraphAction =
@@ -37,7 +39,11 @@ export type GraphAction =
   | { type: "APPLY_EDGE_CHANGES"; changes: EdgeChange[] }
   | { type: "SET_EDGES_AND_NODES"; edges: Edge[]; nodes: Node[] }
   | { type: "SET_NODES_AND_CLEAR_DIRTY"; nodes: Node[] }
-  | { type: "UPDATE_NODE_CONFIG"; nodeId: string; config: ConfigValues };
+  | { type: "UPDATE_NODE_CONFIG"; nodeId: string; config: ConfigValues }
+  | { type: "SET_ERROR"; nodeId: string; error: string }
+  | { type: "CLEAR_ERROR"; nodeId: string }
+  | { type: "SET_CALCULATING"; isCalculating: boolean }
+  | { type: "CLEANUP_NODE"; nodeId: string };
 
 export const initialGraphState: GraphState = {
   nodes: [],
@@ -48,6 +54,8 @@ export const initialGraphState: GraphState = {
   output: "",
   selectedNodeTitle: "",
   dirtyNodes: new Set<string>(),
+  errors: new Map<string, string>(),
+  isCalculating: false,
 };
 
 export const graphReducer = (
@@ -184,6 +192,39 @@ export const graphReducer = (
         nodes: newNodes,
         dirtyNodes: new Set([...state.dirtyNodes, ...affectedNodes]),
       };
+    }
+
+    case "SET_ERROR": {
+      const newErrors = new Map(state.errors);
+      newErrors.set(action.nodeId, action.error);
+      return {
+        ...state,
+        errors: newErrors,
+      };
+    }
+
+    case "CLEAR_ERROR": {
+      const newErrors = new Map(state.errors);
+      newErrors.delete(action.nodeId);
+      return {
+        ...state,
+        errors: newErrors,
+      };
+    }
+
+    case "SET_CALCULATING":
+      return {
+        ...state,
+        isCalculating: action.isCalculating,
+      };
+
+    case "CLEANUP_NODE": {
+      const node = state.nodes.find((n) => n.id === action.nodeId);
+      const operation = node?.data as Operation;
+      if (operation?.cleanup) {
+        operation.cleanup();
+      }
+      return state;
     }
 
     default:

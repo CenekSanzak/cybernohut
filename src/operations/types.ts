@@ -38,5 +38,7 @@ export interface Operation {
   outputs: { [key: string]: IOTypes };
   link?: string;
   onConfigChange?: (newConfig: ConfigValues) => void;
+  cleanup?: () => void;
+  error?: string;
   [key: string]: unknown;
 }

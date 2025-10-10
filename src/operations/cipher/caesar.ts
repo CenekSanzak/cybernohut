@@ -24,6 +24,10 @@ export const CaesarCipher: Operation = {
     [IOTypes.Text],
     [IOTypes.Text]
   ),
+  cleanup: () => {
+    // WASM closures are automatically cleaned up by the garbage collector
+    // This is a placeholder for any manual cleanup if needed
+  },
   tags: [
     OperationTags.Text,
     OperationTags.All,

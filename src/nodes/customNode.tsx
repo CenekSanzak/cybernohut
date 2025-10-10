@@ -33,6 +33,7 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
         position={Position.Top}
         id={key}
         style={{ background: "red" }}
+        aria-label={`Input ${key} of type ${type}`}
       >
         <span
           style={{
@@ -61,6 +62,7 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
           left: `${+(50 / output_length + (100 / output_length) * index)}%`,
           textAlign: "center",
         }}
+        aria-label={`Output ${key} of type ${type}`}
       >
         <span
           style={{
@@ -94,6 +96,7 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
                     });
                   }
                 }}
+                aria-label={`${key} configuration`}
               />
             ) : typeof value === "number" ? (
               <input
@@ -108,6 +111,7 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
                   }
                 }}
                 className="w-16 px-1"
+                aria-label={`${key} configuration`}
               />
             ) : (
               <input
@@ -122,6 +126,7 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
                   }
                 }}
                 className="w-24 px-1"
+                aria-label={`${key} configuration`}
               />
             )}
           </div>
@@ -134,15 +139,22 @@ const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
     () =>
       `p-4 border rounded shadow-md bg-white items-center cursor-pointer hover:bg-gray-50 ${
         selected ? "border-blue-500 border-2" : ""
-      } ${data.tags.includes(OperationTags.IO) ? "bg-gray-50" : ""}`,
-    [selected, data.tags]
+      } ${data.tags.includes(OperationTags.IO) ? "bg-gray-50" : ""} ${
+        data.error ? "border-red-500 border-2" : ""
+      }`,
+    [selected, data.tags, data.error]
   );
 
   return (
     <div className={nodeClassName} data-value={data.value}>
       <div>
         <strong>{data.name}</strong>
-        <div className="text-[10px] text-gray-400 -mt-1">{id}</div>
+        <div className="text-[10px] text-gray-600 -mt-1">{id}</div>
+        {data.error && (
+          <div className="text-[10px] text-red-600 mt-1" title={data.error}>
+            ⚠️ {data.error}
+          </div>
+        )}
       </div>
       {inputHandles}
       <div className="mt-2">{data.value?.slice(0, 30) || ""}</div>

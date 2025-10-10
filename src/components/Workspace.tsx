@@ -146,6 +146,8 @@ const Workspace: React.FC = () => {
 
   const calculate = useCallback(async () => {
     try {
+      dispatch({ type: "SET_CALCULATING", isCalculating: true });
+
       if (!checkInputNodeExists(state.nodes)) {
         dispatch({ type: "SET_OUTPUT", value: "Error: Input node not found" });
         return;
@@ -158,54 +160,79 @@ const Workspace: React.FC = () => {
       );
       if (calculationOrder.length === 0) return;
       let hasChanges = false;
+
+      // Clear previous errors
+      for (const node of calculationOrder) {
+        dispatch({ type: "CLEAR_ERROR", nodeId: node.id });
+      }
+
       for (const node of calculationOrder) {
         if (!node.data) continue;
         const operation = node.data as Operation;
         if (!operation.inputs || Object.keys(operation.inputs).length === 0)
           continue;
 
-        const inputValues: outputTypes[] = state.edges
-          .filter((edge) => edge.target === node.id)
-          .map((edge) => {
-            const sourceNode = newNodes.find((n) => n.id === edge.source);
-            if (!sourceNode) return undefined;
-            const sourceData = sourceNode?.data as Operation;
-            const outputValues = sourceData.outputValues;
-            if (!outputValues) return undefined;
-            return outputValues[edge.sourceHandle || "output"];
-          })
-          .filter((value) => value !== undefined);
+        try {
+          const inputValues: outputTypes[] = state.edges
+            .filter((edge) => edge.target === node.id)
+            .map((edge) => {
+              const sourceNode = newNodes.find((n) => n.id === edge.source);
+              if (!sourceNode) return undefined;
+              const sourceData = sourceNode?.data as Operation;
+              const outputValues = sourceData.outputValues;
+              if (!outputValues) return undefined;
+              return outputValues[edge.sourceHandle || "output"];
+            })
+            .filter((value) => value !== undefined);
 
-        if (inputValues.length === 0) continue;
+          if (inputValues.length === 0) continue;
 
-        const calculated = operation.func.apply({}, inputValues);
-        lastValue = calculated[0];
+          const calculated = operation.func.apply({}, inputValues);
+          lastValue = calculated[0];
 
-        const newOutputValues: { [key: string]: outputTypes } = {};
-        const outputKeys = Object.keys(
-          operation.outputs as { [key: string]: IOTypes }
-        );
+          const newOutputValues: { [key: string]: outputTypes } = {};
+          const outputKeys = Object.keys(
+            operation.outputs as { [key: string]: IOTypes }
+          );
 
-        for (let index = 0; index < outputKeys.length; index++) {
-          const key = outputKeys[index];
-          newOutputValues[key] = Array.isArray(calculated)
-            ? calculated[index]
-            : calculated;
-        }
+          for (let index = 0; index < outputKeys.length; index++) {
+            const key = outputKeys[index];
+            newOutputValues[key] = Array.isArray(calculated)
+              ? calculated[index]
+              : calculated;
+          }
 
-        const nodeIndex = newNodes.findIndex((n) => n.id === node.id);
-        if (nodeIndex !== -1) {
-          const newNode = {
-            ...node,
-            data: {
-              ...node.data,
-              value: calculated.toString(),
-              outputValues: newOutputValues,
-            },
-          };
+          const nodeIndex = newNodes.findIndex((n) => n.id === node.id);
+          if (nodeIndex !== -1) {
+            const newNode = {
+              ...node,
+              data: {
+                ...node.data,
+                value: calculated.toString(),
+                outputValues: newOutputValues,
+                error: undefined,
+              },
+            };
 
-          if (!isEqual(operation.outputValues, newOutputValues)) {
-            newNodes[nodeIndex] = newNode;
+            if (!isEqual(operation.outputValues, newOutputValues)) {
+              newNodes[nodeIndex] = newNode;
+              hasChanges = true;
+            }
+          }
+        } catch (nodeError) {
+          const errorMessage =
+            nodeError instanceof Error ? nodeError.message : "Unknown error";
+          dispatch({ type: "SET_ERROR", nodeId: node.id, error: errorMessage });
+
+          const nodeIndex = newNodes.findIndex((n) => n.id === node.id);
+          if (nodeIndex !== -1) {
+            newNodes[nodeIndex] = {
+              ...node,
+              data: {
+                ...node.data,
+                error: errorMessage,
+              },
+            };
             hasChanges = true;
           }
         }
@@ -236,6 +263,8 @@ const Workspace: React.FC = () => {
           "Error: " +
           (error instanceof Error ? error.message : "Unknown error"),
       });
+    } finally {
+      dispatch({ type: "SET_CALCULATING", isCalculating: false });
     }
   }, [state.nodes, state.edges, state.selectedNodeId, state.dirtyNodes]);
 
@@ -251,6 +280,44 @@ const Workspace: React.FC = () => {
       debouncedCalculate.cancel();
     };
   }, [autoCalculate, debouncedCalculate]);
+
+  // Cleanup WASM closures on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup all node closures
+      state.nodes.forEach((node) => {
+        const operation = node.data as Operation;
+        if (operation?.cleanup) {
+          operation.cleanup();
+        }
+      });
+    };
+  }, []);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Ctrl/Cmd + S to save (placeholder for future implementation)
+      if ((event.ctrlKey || event.metaKey) && event.key === "s") {
+        event.preventDefault();
+        console.log("Save functionality not yet implemented");
+      }
+
+      // Ctrl/Cmd + Z for undo (placeholder for future implementation)
+      if ((event.ctrlKey || event.metaKey) && event.key === "z") {
+        event.preventDefault();
+        console.log("Undo functionality not yet implemented");
+      }
+
+      // Escape to clear selection
+      if (event.key === "Escape") {
+        dispatch({ type: "SELECT_NODE", nodeId: "", nodeTitle: "" });
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleNodeClick = useCallback(
     (value: string, nodeId: string) => {
@@ -270,6 +337,15 @@ const Workspace: React.FC = () => {
 
   const handleNodesDelete = useCallback(
     (deleted: Node[], remainingNodes: Node[], newEdges: Edge[]) => {
+      // Cleanup WASM closures for deleted nodes
+      deleted.forEach((node) => {
+        const operation = node.data as Operation;
+        if (operation?.cleanup) {
+          operation.cleanup();
+        }
+        dispatch({ type: "CLEANUP_NODE", nodeId: node.id });
+      });
+
       if (deleted.some((node) => node.id === state.selectedInputId)) {
         const remainingInputNodes = remainingNodes.filter((node) =>
           (node.data as Operation).tags.includes(OperationTags.IO)
@@ -358,6 +434,7 @@ const Workspace: React.FC = () => {
       nodes: state.nodes,
       selectedInputId: state.selectedInputId,
       onInputTabSelect: handleInputTabSelect,
+      isCalculating: state.isCalculating,
     }),
     [
       autoCalculate,
@@ -368,6 +445,7 @@ const Workspace: React.FC = () => {
       state.selectedNodeTitle,
       state.nodes,
       state.selectedInputId,
+      state.isCalculating,
       handleInputChange,
       handleInputTabSelect,
     ]

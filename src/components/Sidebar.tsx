@@ -58,19 +58,20 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
       <h2 className="text-xl font-bold mb-4">Operations</h2>
 
       <div className="relative mb-4">
-        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-600" />
         <input
           type="text"
           placeholder="Search operations..."
           className="w-full pl-8 pr-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          aria-label="Search operations"
         />
       </div>
 
       {searchQuery && searchResults.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-500 mb-2">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">
             Search Results
           </h3>
           <div className="space-y-1">
@@ -82,6 +83,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
                       className="w-full justify-start text-sm"
                       variant="ghost"
                       onClick={() => onOperationSelect(op)}
+                      aria-label={`Add ${op.name} operation`}
                     >
                       {op.name}
                     </Button>
@@ -137,6 +139,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
                         className="w-full justify-start text-sm"
                         variant="ghost"
                         onClick={() => onOperationSelect(op)}
+                        aria-label={`Add ${op.name} operation`}
                       >
                         {op.name}
                       </Button>

@@ -41,6 +41,10 @@ export const Base16Encode: Operation = {
     [IOTypes.Text],
     [IOTypes.Text]
   ),
+  cleanup: () => {
+    // WASM closures are automatically cleaned up by the garbage collector
+    // This is a placeholder for any manual cleanup if needed
+  },
   tags: [OperationTags.NumberBase, OperationTags.Encoding, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },

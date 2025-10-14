@@ -43,7 +43,8 @@ export type GraphAction =
   | { type: "SET_ERROR"; nodeId: string; error: string }
   | { type: "CLEAR_ERROR"; nodeId: string }
   | { type: "SET_CALCULATING"; isCalculating: boolean }
-  | { type: "CLEANUP_NODE"; nodeId: string };
+  | { type: "CLEANUP_NODE"; nodeId: string }
+  | { type: "LOAD_GRAPH"; state: Partial<GraphState> };
 
 export const initialGraphState: GraphState = {
   nodes: [],
@@ -225,6 +226,25 @@ export const graphReducer = (
         operation.cleanup();
       }
       return state;
+    }
+
+    case "LOAD_GRAPH": {
+      // Merge loaded state while preserving transient runtime state
+      return {
+        ...state,
+        nodes: action.state.nodes || state.nodes,
+        edges: action.state.edges || state.edges,
+        selectedInputId: action.state.selectedInputId || state.selectedInputId,
+        input: action.state.input || state.input,
+        selectedNodeId: action.state.selectedNodeId || state.selectedNodeId,
+        selectedNodeTitle:
+          action.state.selectedNodeTitle || state.selectedNodeTitle,
+        // Preserve transient state
+        dirtyNodes: new Set<string>(),
+        errors: new Map<string, string>(),
+        isCalculating: false,
+        output: "",
+      };
     }
 
     default:

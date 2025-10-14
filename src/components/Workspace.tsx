@@ -39,6 +39,15 @@ import { Input } from "@/operations/io";
 import { debounce, isEqual } from "lodash";
 import { graphReducer, initialGraphState } from "@/state/graphReducer";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { GraphControls } from "./GraphControls";
+import { NotificationContainer } from "./ui/notification";
+import { showNotification } from "@/utils/notifications";
+import {
+  saveGraphToLocalStorage,
+  loadGraphFromLocalStorage,
+  clearStoredGraphState,
+} from "@/state/storage";
+import { decodeGraphFromURL } from "@/utils/urlSharing";
 
 import Sidebar from "@/components/Sidebar";
 import InputOutput from "@/components/InputOutput";
@@ -318,6 +327,40 @@ const Workspace: React.FC = () => {
     };
   }, [autoCalculate, debouncedCalculate]);
 
+  // Auto-save to localStorage (debounced)
+  const debouncedSave = useMemo(
+    () => debounce((state) => saveGraphToLocalStorage(state), 500),
+    []
+  );
+
+  useEffect(() => {
+    debouncedSave(state);
+    return () => {
+      debouncedSave.cancel();
+    };
+  }, [state, debouncedSave]);
+
+  // Load from URL or localStorage on mount
+  useEffect(() => {
+    const loadInitialState = () => {
+      // Priority: URL > LocalStorage > default
+      const urlState = decodeGraphFromURL();
+      if (urlState) {
+        dispatch({ type: "LOAD_GRAPH", state: urlState });
+        showNotification("Graph loaded from URL", "info");
+        return;
+      }
+
+      const storedState = loadGraphFromLocalStorage();
+      if (storedState) {
+        dispatch({ type: "LOAD_GRAPH", state: storedState });
+        showNotification("Graph loaded from storage", "info");
+      }
+    };
+
+    loadInitialState();
+  }, []);
+
   useEffect(() => {
     return () => {
       state.nodes.forEach((node) => {
@@ -327,13 +370,43 @@ const Workspace: React.FC = () => {
         }
       });
     };
-  }, []);
+  }, [state.nodes]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "s") {
         event.preventDefault();
-        console.log("Save functionality not yet implemented");
+        // Trigger export
+        const graphData = {
+          version: "1.0",
+          timestamp: new Date().toISOString(),
+          nodes: state.nodes,
+          edges: state.edges,
+          selectedInputId: state.selectedInputId,
+          input: state.input,
+          selectedNodeId: state.selectedNodeId,
+          selectedNodeTitle: state.selectedNodeTitle,
+        };
+
+        const jsonString = JSON.stringify(graphData, null, 2);
+        const blob = new Blob([jsonString], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+
+        const timestamp = new Date()
+          .toISOString()
+          .replace(/[:.]/g, "-")
+          .slice(0, 19);
+        const filename = `cybernohut-graph-${timestamp}.json`;
+
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+
+        showNotification("Graph exported!", "success");
       }
 
       if ((event.ctrlKey || event.metaKey) && event.key === "z") {
@@ -348,7 +421,7 @@ const Workspace: React.FC = () => {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [state]);
 
   const handleNodeClick = useCallback(
     (value: string, nodeId: string) => {
@@ -429,6 +502,38 @@ const Workspace: React.FC = () => {
     dispatch({ type: "APPLY_EDGE_CHANGES", changes });
   }, []);
 
+  // GraphControls handlers
+  const handleImport = useCallback((file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+
+        // Validate structure
+        if (!parsed.nodes || !parsed.edges) {
+          throw new Error("Invalid graph file format");
+        }
+
+        dispatch({ type: "LOAD_GRAPH", state: parsed });
+        showNotification("Graph imported successfully!", "success");
+      } catch (error) {
+        console.error("Import failed:", error);
+        showNotification("Invalid graph file", "error");
+      }
+    };
+
+    reader.readAsText(file);
+  }, []);
+
+  const handleClear = useCallback(() => {
+    dispatch({
+      type: "LOAD_GRAPH",
+      state: { ...initialGraphState, nodes: initialNodes },
+    });
+    clearStoredGraphState();
+  }, []);
+
   const graphProps = useMemo(
     () => ({
       setEdges: (edges: Edge[]) => dispatch({ type: "SET_EDGES", edges }),
@@ -494,22 +599,30 @@ const Workspace: React.FC = () => {
       <ErrorBoundary>
         <Sidebar {...sidebarProps} />
       </ErrorBoundary>
-      <div className="flex-1 flex">
-        <div className="w-2/3 p-4 border-r">
-          <ErrorBoundary
-            onError={(error) => {
-              console.error("Graph error:", error);
-            }}
-          >
-            <OperationGraph {...graphProps} />
-          </ErrorBoundary>
-        </div>
-        <div className="w-1/3 flex flex-col">
-          <ErrorBoundary>
-            <InputOutput {...inputOutputProps} />
-          </ErrorBoundary>
+      <div className="flex-1 flex flex-col">
+        <GraphControls
+          state={state}
+          onImport={handleImport}
+          onClear={handleClear}
+        />
+        <div className="flex-1 flex">
+          <div className="w-2/3 p-4 border-r">
+            <ErrorBoundary
+              onError={(error) => {
+                console.error("Graph error:", error);
+              }}
+            >
+              <OperationGraph {...graphProps} />
+            </ErrorBoundary>
+          </div>
+          <div className="w-1/3 flex flex-col">
+            <ErrorBoundary>
+              <InputOutput {...inputOutputProps} />
+            </ErrorBoundary>
+          </div>
         </div>
       </div>
+      <NotificationContainer />
     </div>
   );
 };

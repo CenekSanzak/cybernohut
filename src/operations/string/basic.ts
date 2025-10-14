@@ -1,6 +1,6 @@
 import { Operation, OperationTags, IOTypes } from "@/operations/types";
 import { build_slice_text } from "wasm";
-import { validateOutputTypeStringToString } from "./utils";
+import { wasmTextToTextWithConfig } from "@/operations/wasm-adapter";
 
 export const SliceText: Operation = {
   name: "Slice Text",
@@ -12,18 +12,20 @@ export const SliceText: Operation = {
     end: 0,
   },
   funcBuilder: (config) => {
-    const builtFunction = build_slice_text(JSON.stringify(config || {}));
-    return validateOutputTypeStringToString(
-      (input: string) => builtFunction(input),
-      [IOTypes.Text],
-      [IOTypes.Text]
+    return wasmTextToTextWithConfig(
+      build_slice_text as (config: string) => (input: string) => string[],
+      config || {},
+      "text"
     );
   },
-  func: validateOutputTypeStringToString(
-    (input: string) => build_slice_text(JSON.stringify({}))(input),
-    [IOTypes.Text],
-    [IOTypes.Text]
+  func: wasmTextToTextWithConfig(
+    build_slice_text as (config: string) => (input: string) => string[],
+    {},
+    "text"
   ),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
+  cleanup: () => {},
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },

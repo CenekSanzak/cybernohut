@@ -18,6 +18,13 @@ import {
   Sha256,
   SliceText,
 } from "./string";
+import {
+  CountWords,
+  SplitText,
+  JoinText,
+  ConcatenateText,
+  TextStats,
+} from "./string/advanced";
 import { CaesarCipher, ROT13 } from "./cipher";
 import { Input } from "./io";
 import { Operation } from "./types";
@@ -44,4 +51,9 @@ export const operations: Operation[] = [
   CaesarCipher,
   ROT13,
   SliceText,
+  CountWords,
+  SplitText,
+  JoinText,
+  ConcatenateText,
+  TextStats,
 ];

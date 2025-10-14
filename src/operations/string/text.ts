@@ -5,18 +5,16 @@ import {
   lowercase_string,
   remove_whitespace,
 } from "wasm";
-import { validateOutputTypeStringToString } from "./utils";
+import { wasmTextToText } from "../wasm-adapter";
 
 export const Reverse: Operation = {
   name: "Reverse",
   id: "reverse",
   description: "Reverses the input string",
   value: "",
-  func: validateOutputTypeStringToString(
-    reverse_string,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(reverse_string),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -27,11 +25,9 @@ export const Uppercase: Operation = {
   id: "to-uppercase",
   description: "Converts the input string to uppercase",
   value: "",
-  func: validateOutputTypeStringToString(
-    uppercase_string,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(uppercase_string),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -42,11 +38,9 @@ export const Lowercase: Operation = {
   id: "to-lowercase",
   description: "Converts the input string to lowercase",
   value: "",
-  func: validateOutputTypeStringToString(
-    lowercase_string,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(lowercase_string),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },
@@ -57,11 +51,9 @@ export const RemoveSpaces: Operation = {
   id: "remove-spaces",
   description: "Removes all whitespace from the input string",
   value: "",
-  func: validateOutputTypeStringToString(
-    remove_whitespace,
-    [IOTypes.Text],
-    [IOTypes.Text]
-  ),
+  func: wasmTextToText(remove_whitespace),
+  inputTypes: [{ type: "text", value: "" }],
+  outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Text, OperationTags.All],
   inputs: { input: IOTypes.Text },
   outputs: { output: IOTypes.Text },

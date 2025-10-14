@@ -29,17 +29,35 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback || (
-          <div className="p-4 border border-red-500 rounded bg-red-50">
-            <h2 className="text-red-700">Something went wrong</h2>
+          <div
+            className="p-4 border border-red-500 rounded bg-red-50"
+            role="alert"
+          >
+            <h2 className="text-red-700 font-semibold">Something went wrong</h2>
             <details className="mt-2 text-sm text-red-600">
-              {this.state.error?.toString()}
+              <summary className="cursor-pointer font-medium">
+                Error details
+              </summary>
+              <div className="mt-2 p-2 bg-red-100 rounded">
+                {this.state.error?.toString()}
+              </div>
             </details>
-            <button
-              className="mt-4 px-4 py-2 bg-red-500 text-white rounded"
-              onClick={() => this.setState({ hasError: false })}
-            >
-              Try again
-            </button>
+            <div className="mt-4 flex gap-2">
+              <button
+                className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                onClick={() => this.setState({ hasError: false })}
+                aria-label="Try again"
+              >
+                Try again
+              </button>
+              <button
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2"
+                onClick={() => window.location.reload()}
+                aria-label="Reload page"
+              >
+                Reload page
+              </button>
+            </div>
           </div>
         )
       );

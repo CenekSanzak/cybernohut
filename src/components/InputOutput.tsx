@@ -23,6 +23,7 @@ interface InputOutputProps {
   nodes: Node[];
   selectedInputId?: string;
   onInputTabSelect: (nodeId: string) => void;
+  isCalculating?: boolean;
 }
 
 const InputOutput = React.memo<InputOutputProps>(
@@ -38,6 +39,7 @@ const InputOutput = React.memo<InputOutputProps>(
     nodes,
     selectedInputId,
     onInputTabSelect,
+    isCalculating = false,
   }) => {
     const inputNodes = useMemo(
       () =>
@@ -75,11 +77,15 @@ const InputOutput = React.memo<InputOutputProps>(
             }
             className="w-full h-[calc(100%-4rem)]"
             placeholder="Enter your input here..."
+            aria-label="Input text"
           />
         </div>
         <div className="h-1/2 p-4 bg-gray-50">
           <h3 className="text-lg font-semibold mb-2 flex items-center gap-4">
             Output{" "}
+            {isCalculating && (
+              <span className="text-sm text-blue-600">⏳ Calculating...</span>
+            )}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <TooltipProvider>
@@ -128,7 +134,7 @@ const InputOutput = React.memo<InputOutputProps>(
             </div>
           </h3>
           {selectedNodeId && (
-            <div className="text-sm text-gray-500 mb-2">
+            <div className="text-sm text-gray-700 mb-2">
               {selectedNodeTitle} ({selectedNodeId}):
             </div>
           )}
@@ -137,6 +143,8 @@ const InputOutput = React.memo<InputOutputProps>(
             readOnly
             className="w-full h-[calc(100%-4rem)] bg-white"
             placeholder="Output will appear here..."
+            aria-label="Output text"
+            aria-live="polite"
           />
         </div>
       </div>

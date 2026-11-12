@@ -35,6 +35,9 @@ fn shift_owned(text: String, shift: i32) -> String {
     String::from_utf8(bytes).expect("shifting ASCII letters keeps the text valid UTF-8")
 }
 
+/// When every shift is listed, this many characters of each are shown.
+const LISTED_CHARS: usize = 500;
+
 /// How much better a rewritten text has to score before it is worth suggesting, and
 /// how readable it has to be in absolute terms.
 const MIN_GAIN: f64 = 0.15;
@@ -107,11 +110,19 @@ impl Op for CaesarCipher {
         if config.shift != 0 {
             return Ok(shift_text(input, config.shift));
         }
+        // The list is for reading by eye, so each candidate shows only its start;
+        // twenty-six full copies of a large input would be of no use to anyone.
+        let (shown, cut) = match input.char_indices().nth(LISTED_CHARS) {
+            Some((end, _)) => (&input[..end], "…"),
+            None => (input, ""),
+        };
         let known = config.known_part.to_lowercase();
         let candidates: Vec<String> = (0..26)
-            .map(|shift| (shift, shift_text(input, shift)))
-            .filter(|(_, text)| known.is_empty() || text.to_lowercase().contains(&known))
-            .map(|(shift, text)| format!("Shift {shift}: {text}"))
+            // The known part is looked for in the whole text, not just what is shown.
+            .filter(|shift| {
+                known.is_empty() || shift_text(input, *shift).to_lowercase().contains(&known)
+            })
+            .map(|shift| format!("Shift {shift}: {}{cut}", shift_text(shown, shift)))
             .collect();
         Ok(candidates.join("\n"))
     }
@@ -404,6 +415,20 @@ mod tests {
         let output = CaesarCipher::run(&config(0, ""), "abc").unwrap();
         assert_eq!(output.lines().count(), 26);
         assert!(output.contains("Shift 1: bcd"));
+    }
+
+    #[test]
+    fn listing_a_long_text_shows_the_start_of_each_shift() {
+        let long = format!("{}needle", "abc ".repeat(5000));
+        let listed = CaesarCipher::run(&config(0, ""), &long).unwrap();
+        assert_eq!(listed.lines().count(), 26);
+        assert!(listed.len() < 26 * (LISTED_CHARS + 20), "{} bytes", listed.len());
+        assert!(listed.starts_with("Shift 0: abc abc"));
+        assert!(listed.lines().all(|line| line.ends_with('…')));
+        // The known part is past what is shown, and is still found.
+        let narrowed = CaesarCipher::run(&config(0, "needle"), &long).unwrap();
+        assert_eq!(narrowed.lines().count(), 1);
+        assert!(narrowed.starts_with("Shift 0: "));
     }
 
     #[test]

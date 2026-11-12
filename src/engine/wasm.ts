@@ -1,18 +1,13 @@
 /**
- * Typed access to the Rust engine.
+ * The engine's metadata, on the main thread.
  *
  * Every type here is generated from the Rust source by wasm-bindgen and tsify; nothing
- * about an operation is declared in TypeScript.
+ * about an operation is declared in TypeScript. This instance only answers questions
+ * about operations and types. Graphs are evaluated by a second instance in a worker
+ * (see ./client.ts), so heavy work never blocks the page.
  */
 import * as wasm from "wasm";
-import type {
-  Graph,
-  NodeReport,
-  OpConfigMap,
-  OpId,
-  OpMeta,
-  ValueType,
-} from "wasm";
+import type { OpConfigMap, OpId, OpMeta, ValueType } from "wasm";
 
 export type {
   ErrorCode,
@@ -25,6 +20,7 @@ export type {
   OpId,
   OpMeta,
   OutputPreview,
+  OutputText,
   ParamKind,
   ParamSpec,
   Port,
@@ -53,21 +49,4 @@ export function getMeta<K extends OpId>(id: K): OpMetaOf<K> {
 /** Whether an output of type `from` may feed an input of type `to`. */
 export function canConnect(from: ValueType, to: ValueType): boolean {
   return wasm.can_connect(from, to);
-}
-
-/** How many characters of each output the engine returns as a preview. */
-const PREVIEW_CHARS = 60;
-
-/**
- * Evaluates the whole graph. A node that fails is reported, not thrown; this throws
- * only if the graph description itself is malformed.
- */
-export function evaluate(graph: Graph): Map<string, NodeReport> {
-  const reports = wasm.evaluate(graph, PREVIEW_CHARS);
-  return new Map(reports.map((report) => [report.id, report]));
-}
-
-/** The full output of a node, from the most recent {@link evaluate} call. */
-export function outputText(nodeId: string, port: string): string | undefined {
-  return wasm.output_text(nodeId, port);
 }

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import { catalog, isOpId, outputText } from "@/engine/wasm";
+import { catalog, isOpId } from "@/engine/wasm";
 import { GraphDispatchContext, ReportsContext } from "@/graph/context";
-import { nodeTitle, outputPorts } from "@/graph/model";
+import { nodeTitle } from "@/graph/model";
 import {
   clearStorage,
   loadFromStorage,
@@ -9,7 +9,7 @@ import {
   saveToStorage,
   type GraphSnapshot,
 } from "@/graph/persistence";
-import { useEvaluation } from "@/graph/useEvaluation";
+import { useEvaluation, useNodeOutput } from "@/graph/useEvaluation";
 import { createInitialState, graphReducer } from "@/state/graphReducer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphCanvas } from "./GraphCanvas";
@@ -47,7 +47,8 @@ function loadInitialState(): GraphSnapshot {
 const Workspace: React.FC = () => {
   const [state, dispatch] = useReducer(graphReducer, undefined, loadInitialState);
   const [autoCalculate, setAutoCalculate] = useState(true);
-  const { reports, run } = useEvaluation(state.nodes, state.edges, autoCalculate);
+  const { evaluation, run } = useEvaluation(state.nodes, state.edges, autoCalculate);
+  const { reports } = evaluation;
 
   useEffect(() => {
     const timer = setTimeout(() => saveToStorage(state), SAVE_DELAY_MS);
@@ -89,14 +90,22 @@ const Workspace: React.FC = () => {
   const inputText = selectedInput?.data.kind === "input" ? selectedInput.data.text : "";
   const selectedNode = state.nodes.find((node) => node.id === state.selectedNodeId);
 
-  // The engine keeps the values of its last evaluation; `reports` changing is the
-  // signal that there is a new full output to fetch for the selected node.
+  const selectedOutput = useNodeOutput(selectedNode, evaluation);
+
   const output = useMemo(() => {
+    if (evaluation.error) {
+      return `The engine stopped: ${evaluation.error}\nThis usually means the data got too large to hold in memory.`;
+    }
     if (!selectedNode) return "";
     const report = reports.get(selectedNode.id);
     switch (report?.status) {
-      case "ok":
-        return outputText(selectedNode.id, outputPorts(selectedNode.data)[0].name) ?? "";
+      case "ok": {
+        if (!selectedOutput) return "";
+        const { text, truncated, total_chars } = selectedOutput;
+        return truncated
+          ? `${text}\n\n[Showing the first ${text.length.toLocaleString()} of ${total_chars.toLocaleString()} characters]`
+          : text;
+      }
       case "error":
         return `Error: ${report.error.message}`;
       case "waiting":
@@ -106,7 +115,13 @@ const Workspace: React.FC = () => {
       default:
         return "";
     }
-  }, [selectedNode, reports]);
+  }, [selectedNode, reports, selectedOutput, evaluation.error]);
+
+  const status = evaluation.running
+    ? "Calculating…"
+    : evaluation.elapsedMs !== null
+      ? `Ran in ${evaluation.elapsedMs < 10 ? evaluation.elapsedMs.toFixed(1) : Math.round(evaluation.elapsedMs)} ms`
+      : "";
 
   const { selectedInputId } = state;
   const handleInputChange = useCallback(
@@ -138,6 +153,7 @@ const Workspace: React.FC = () => {
                   <InputOutput
                     input={inputText}
                     output={output}
+                    status={status}
                     onInputChange={handleInputChange}
                     calculate={run}
                     autoCalculate={autoCalculate}

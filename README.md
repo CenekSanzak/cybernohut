@@ -2,28 +2,68 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A modern, visual toolkit for data transformation, encoding, encryption and CTF challenges. Inspired by CyberChef, but built with modern web technologies and a focus on visual programming. Leveraging Rust and WebAssembly for high-performance operations, it provides blazing-fast processing capabilities right in your browser.
+A visual toolkit for transforming data: encodings, hashes and classic ciphers, wired together as a graph. Inspired by CyberChef, with the operations and the graph engine written in Rust and compiled to WebAssembly. Everything runs in your browser.
 
 ## Features
 
-- 🎨 **Visual Programming Interface**
-  - Create data processing pipelines using an intuitive drag-and-drop interface
-  - Connect operations with visual flows
-  - Real-time preview of results at each step
+- **Visual graph instead of a linear recipe.** Operations are nodes; an output can feed
+  several branches, and an operation can take several inputs. Every intermediate result
+  is visible on its node.
+- **One engine, written in Rust.** Operations, their types and their settings are
+  defined once in Rust and compiled to WebAssembly. The whole graph is evaluated in one
+  call, so intermediate values never leave wasm memory.
+- **Typed connections.** Ports are `text`, `bytes`, `number` or lists. Text feeds a
+  bytes port as its UTF-8 encoding; going the other way can fail, so connecting bytes to
+  text adds a visible "Decode Text (UTF-8)" step rather than converting silently.
+- **Runs off the main thread.** Evaluation happens in a Web Worker. A newer run cancels
+  the one in flight, and an out-of-memory crash restarts the engine instead of the page.
+- **Shareable.** A graph is plain data: it is saved locally, exported as JSON, or packed
+  into a link.
 
-- ⚡ **High Performance**
-  - Core operations implemented in Rust and compiled to WebAssembly
-  - Efficient processing of large data sets
-  - Client-side processing for data privacy
+### Operations
 
-- 🧩 **Modular Operation System**
-  - Easy to add new operations
-  - Type-safe connections between operations
-  - Categorized operation sidebar for easy discovery
+Base64 (standard and URL-safe), Base32, Base85 and hexadecimal encode/decode; MD5, SHA-1
+and SHA-256; Caesar cipher and ROT13; reverse, case conversion, slice, split, join,
+concatenate, word count and text statistics. Any single-input text operation can also be
+run line by line.
 
-- 🔄 **Current Operations**
-  - String manipulations (reverse, case conversion, whitespace removal)
-  - More coming soon!
+## How it fits together
+
+```
+wasm/src/core    Value, the Op trait, errors: the contract every operation implements
+wasm/src/ops     one file per family of operations, plus the list that registers them
+wasm/src/graph   evaluates a whole graph: ordering, type checks, per-node reports
+wasm/src/api     the wasm boundary: catalog(), evaluate(), output_text(), can_connect()
+src/engine       the generated types, the worker and the page's client for it
+src/graph        the graph as data, persistence, and the evaluation hooks
+src/components   the React UI, driven entirely by the catalog
+```
+
+### Adding an operation
+
+Implement `Op` in `wasm/src/ops` and add one line to the `ops!` list in
+`wasm/src/ops/mod.rs`. Port types come from the `run` signature, and the settings form
+is generated from `params()`, so there is nothing to write in TypeScript: the sidebar
+entry, the node, its settings and its TypeScript config type all follow.
+
+```rust
+pub struct Reverse;
+
+impl Op for Reverse {
+    const ID: &'static str = "reverse";
+    const NAME: &'static str = "Reverse";
+    const DESCRIPTION: &'static str = "Reverses the order of the characters";
+    const TAGS: &'static [Tag] = &[Tag::Text];
+
+    type Config = NoConfig;
+    type In<'a> = &'a str;
+    type Out = String;
+
+    fn run(_: &NoConfig, input: &str) -> Result<String, OpError> {
+        Ok(input.chars().rev().collect())
+    }
+}
+```
 
 ## Getting Started
 
@@ -55,6 +95,9 @@ npm run dev
 npm run build
 ```
 
+Rebuild the wasm module with `wasm-pack build wasm` after changing Rust code, and run
+the engine's tests with `cargo test --manifest-path wasm/Cargo.toml`.
+
 ## Tech Stack
 
 - **Frontend**: React 18 with TypeScript
@@ -64,23 +107,9 @@ npm run build
 - **Core Operations**: Rust (WebAssembly)
 - **UI Components**: Custom components with Radix UI primitives
 
-## Differences from CyberChef
-
-- **Modern Tech Stack**: Built with React, TypeScript, and Rust/WebAssembly
-- **Visual Programming**: True visual programming interface instead of linear recipe list
-- **Type Safety**: Built-in type checking between operations
-- **Performance**: Core operations implemented in Rust for maximum performance
-- **Real-time Preview**: See results update in real-time as you build your pipeline
-
 ## Roadmap
 
-See our detailed [roadmap](roadmap.md) for planned features and improvements.
-
-Quick overview:
-
-- v0.1.x: Core CTF essentials (encodings, ciphers, hashing)
-- v0.2.x: File handling & basic steganography
-- v0.3.x: Advanced features (RSA, AES, forensics)
+See the [roadmap](roadmap.md).
 
 ## Contributing
 

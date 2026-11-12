@@ -1,207 +1,32 @@
-# Cyber Nohut Development Roadmap
+# Roadmap
 
-This roadmap outlines our development plans, focusing on incremental delivery of features while maintaining stability and usability at each stage.
+## Done
 
-## Current Status (v0.0.1)
+- Operations defined once in Rust behind a typed contract; TypeScript types generated
+- Graph evaluation in Rust, with values kept in wasm memory
+- Evaluation in a Web Worker, with cancellation and crash recovery
+- Typed ports, explicit bytes-to-text conversion, line-by-line mode
+- Save, export, import and share links in one validated format
 
-- ✅ Basic UI Framework
-- ✅ Visual Operation Graph
-- ✅ Core String Operations
-- ✅ WebAssembly Integration
+## Next
 
-## Version 0.1.x – Core CTF Essentials
+1. **Binary and file input.** A file source node, so bytes can enter a graph without
+   passing through text, and a way to download an output.
+2. **Measured performance.** A benchmark page that runs fixed pipelines on large inputs
+   and compares them with the equivalent browser-native code. The claim that the wasm
+   engine is faster has not been measured properly yet.
+3. **More operations.** XOR, URL encoding, regex extract/replace, number-base
+   conversions, magic-byte detection.
+4. **Auto mode.** A search over operations that proposes decoding steps for unknown
+   input. Its result is a graph fragment, not a value: each proposed step shows why it
+   was chosen and becomes an ordinary node once accepted. Needs a per-operation
+   `detect` hook, encode/decode inverse pairs in the catalog, and output scoring.
+5. **Command line.** The engine is a plain Rust crate; a small binary can run a saved
+   graph on a file.
 
-### 0.1.0 – Base Encodings 🔄
+## Not planned
 
-- **Base64 Encode/Decode**
-  - Standard Base64
-  - URL-safe Base64
-  - Custom alphabet support
-- **Hex Encode/Decode**
-  - Various formats (uppercase, lowercase, space-separated)
-- **URL Encode/Decode**
-  - Full URL encoding
-  - Component-only encoding
-- Enhanced UI with format detection
-- Copy/paste improvements
-- Input/output format validation
-
-### 0.1.1 – Classic Ciphers 🔐
-
-- **ROT13** with visual rotation selector
-- **Caesar Cipher**
-  - Custom shift selection
-  - Brute force mode
-  - Frequency analysis integration
-- **Multiple Input Support**
-  - Multiple input nodes in flow
-  - Input node cloning
-  - Input merging operations
-  - Dynamic input naming
-- Modern UI with cipher visualization
-- Real-time preview updates
-
-### 0.1.2 – Hash Generation 🔑
-
-- **Multiple Hash Formats**
-  - MD5
-  - SHA1
-  - SHA256
-- Format Options:
-  - Hex output
-  - Base64 output
-  - Raw bytes
-- Hash comparison tool
-- File hashing support
-
-### 0.1.3 – XOR Operations ⚡
-
-- **Single-Byte XOR**
-  - Key visualization
-  - ASCII preview
-- **Multi-Byte XOR**
-  - Key length detection
-  - Auto-key extension
-- Visual key pattern analysis
-- Hex/text input flexibility
-
-### 0.1.4 – String Utilities 📝
-
-- **Advanced Regex Tools**
-  - Pattern extraction
-  - Replacement with preview
-  - Common pattern library
-- **Case Conversion Suite**
-  - Upper/lowercase
-  - Title case
-  - Camel/snake case
-- **String Manipulation**
-  - Split/join operations
-  - Custom delimiters
-  - Batch processing
-
-### 0.1.5 – Frequency Analysis 📊
-
-- Interactive character frequency table
-- Real-time visualization
-  - Bar charts
-  - Distribution graphs
-- Language detection
-- Common pattern highlighting
-- Export analysis results
-
-### 0.1.6 – Binary Conversions 🔢
-
-- **Multiple Formats**
-  - Binary → ASCII
-  - Octal → ASCII
-  - Decimal → ASCII
-- Configurable options:
-  - Endianness selection
-  - Padding configuration
-  - Non-printable character handling
-
-### 0.1.7 – Cipher Analysis Tools 🔍
-
-- **Automated Analysis**
-  - Caesar cipher detection
-  - XOR key finding
-  - Pattern recognition
-- Scoring system for likely plaintexts
-- Multiple algorithm support
-- Results ranking system
-
-## Version 0.2.x – File Handling & Stego Basics
-
-### 0.2.0 – File Operations 📁
-
-- Drag-and-drop file handling
-- Large file support
-- Progress indicators
-- File type validation
-- Chunk processing for large files
-
-### 0.2.1 – Magic File Detection 🔮
-
-- **Comprehensive Format Detection**
-  - File signatures
-  - Content analysis
-  - MIME type detection
-- Smart operation suggestions
-- Format-specific metadata display
-
-### 0.2.2 – Basic Steganography 🖼️
-
-- **Image Analysis**
-  - LSB extraction/insertion
-  - Color channel manipulation
-  - Metadata examination
-- **File Operations**
-  - Header analysis
-  - Trailer detection
-  - Hidden data extraction
-
-### 0.2.3 – Extended Configuration 🛠️
-
-- Operation presets
-- Custom operation chains
-- Workspace management
-- Export/import configurations
-- Operation history
-
-## Version 0.3.x – Advanced Features
-
-### 0.3.0 – Framework Enhancement 🏗️
-
-- Plugin architecture
-- Custom operation support
-- WebAssembly optimization
-- Performance monitoring
-- Resource management
-
-### 0.3.1 – Cryptographic Tools 🔒
-
-- **RSA Suite**
-  - Key generation
-  - Encryption/decryption
-  - Key analysis
-- **AES Implementation**
-  - Multiple modes (ECB, CBC)
-  - Key management
-  - Padding options
-
-### 0.3.2 – Advanced Steganography 🕵️
-
-- Multi-format stego detection
-- Audio steganography
-- Network packet analysis
-- Automated scanning
-- Result classification
-
-### 0.3.3 – Forensics Suite 🔍
-
-- File carving
-- Memory analysis
-- Timeline reconstruction
-- Artifact extraction
-- Report generation
-
-### 0.3.4 – Collaboration Features 🤝
-
-- Operation sharing
-- Team workspaces
-- Real-time collaboration
-- Version control
-- Documentation integration
-
-## Future Considerations 🔮
-
-- Mobile support
-- Offline capabilities
-- Cloud integration
-- API access
-- Extended plugin ecosystem
-
----
-
-This roadmap is subject to change based on community feedback and emerging needs. Contributions and suggestions are welcome!
+- Collaboration, team workspaces, real-time editing
+- Forensics, memory analysis, network packet analysis
+- A third-party plugin system. The contract is shaped so that operations could later be
+  packaged as WebAssembly components, but nothing is built for it.

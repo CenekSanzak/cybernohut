@@ -13,7 +13,7 @@ use tsify::Ts;
 use wasm_bindgen::prelude::*;
 
 use crate::core::{OpMeta, ValueType};
-use crate::graph::{self, Evaluation, Graph, NodeReport};
+use crate::graph::{self, Evaluation, Graph, NodeReport, OutputText};
 use crate::ops;
 
 thread_local! {
@@ -59,8 +59,14 @@ pub fn evaluate(graph: Ts<Graph>, preview_chars: usize) -> Result<Vec<Ts<NodeRep
     reports
 }
 
-/// The full, displayable output of a node from the last evaluation.
+/// The displayable output of a node from the last evaluation, cut to `max_chars` so a
+/// huge result cannot freeze the page that shows it.
 #[wasm_bindgen]
-pub fn output_text(node_id: &str, port: &str) -> Option<String> {
-    LAST.with(|last| last.borrow().output(node_id, port).map(graph::display))
+pub fn output_text(node_id: &str, port: &str, max_chars: usize) -> Result<Option<Ts<OutputText>>, JsError> {
+    LAST.with(|last| {
+        last.borrow()
+            .output(node_id, port)
+            .map(|value| Ts::from_rust(&graph::display(value, max_chars)).map_err(to_js_error))
+            .transpose()
+    })
 }

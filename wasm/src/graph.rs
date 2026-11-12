@@ -292,8 +292,15 @@ fn preview(port: &str, value: &Value, max_chars: usize) -> OutputPreview {
     OutputPreview { port: port.into(), ty: value.value_type(), size, preview, truncated }
 }
 
-/// The full, human-readable form of a value, for the output panel.
-pub fn display(value: &Value) -> String {
+#[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
+pub struct OutputText {
+    pub text: String,
+    /// Characters in the complete output, of which `text` may be only the beginning.
+    pub total_chars: usize,
+    pub truncated: bool,
+}
+
+fn render(value: &Value) -> String {
     match value {
         Value::Text(text) => text.clone(),
         // Bytes that happen to be valid UTF-8 are shown as text. This is display only:
@@ -316,6 +323,14 @@ pub fn display(value: &Value) -> String {
             .collect::<Vec<_>>()
             .join("\n"),
     }
+}
+
+/// The human-readable form of a value for the output panel, cut to `max_chars`.
+pub fn display(value: &Value, max_chars: usize) -> OutputText {
+    let full = render(value);
+    let total_chars = full.chars().count();
+    let (text, truncated) = truncate_chars(&full, max_chars);
+    OutputText { text, total_chars, truncated }
 }
 
 #[cfg(test)]
@@ -345,7 +360,7 @@ mod tests {
     }
 
     fn text_of(evaluation: &Evaluation, node: &str) -> String {
-        display(evaluation.output(node, "output").expect("node has an output"))
+        display(evaluation.output(node, "output").expect("node has an output"), usize::MAX).text
     }
 
     #[test]
@@ -506,6 +521,13 @@ mod tests {
         let evaluation = evaluate(&graph);
         assert_eq!(evaluation.output("stats", "wordCount"), Some(&Value::Number(2.0)));
         assert_eq!(evaluation.output("stats", "charCount"), Some(&Value::Number(7.0)));
+    }
+
+    #[test]
+    fn long_outputs_are_cut_for_display_and_say_so() {
+        let shown = display(&Value::Text("nohut".repeat(10)), 12);
+        assert_eq!(shown.text, "nohutnohutno");
+        assert_eq!((shown.total_chars, shown.truncated), (50, true));
     }
 
     #[test]

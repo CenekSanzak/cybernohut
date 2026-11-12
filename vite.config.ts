@@ -12,6 +12,10 @@ export default defineConfig({
     },
   },
   plugins: [react(), wasm()],
+  worker: {
+    format: "es",
+    plugins: () => [wasm()],
+  },
   css: {
     postcss: {
       plugins: [tailwindcss],

@@ -12,6 +12,7 @@ import {
 interface InputOutputProps {
   input: string;
   output: string;
+  status: string;
   onInputChange: (value: string) => void;
   calculate: () => void;
   autoCalculate: boolean;
@@ -27,6 +28,7 @@ const InputOutput = React.memo<InputOutputProps>(
   ({
     input,
     output,
+    status,
     onInputChange,
     calculate,
     autoCalculate,
@@ -70,6 +72,9 @@ const InputOutput = React.memo<InputOutputProps>(
         <div className="h-1/2 p-4 bg-gray-50">
           <h3 className="text-lg font-semibold mb-2 flex items-center gap-4">
             Output{" "}
+            <span className="text-xs font-normal text-gray-500" aria-live="polite">
+              {status}
+            </span>
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <TooltipProvider>

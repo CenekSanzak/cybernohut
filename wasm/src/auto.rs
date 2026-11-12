@@ -270,6 +270,25 @@ mod tests {
     }
 
     #[test]
+    fn compressed_data_is_inflated_rather_than_offered_as_a_file() {
+        for (compress, inflate) in [("gzip", "gunzip"), ("zlib-deflate", "zlib-inflate")] {
+            let input = encode(&[(compress, json!({})), ("base64-standard-encode", json!({}))]);
+            let best = &suggest(&input)[0];
+            assert_eq!(ops_of(best), ["base64-standard-decode", inflate, "utf8-decode"]);
+            assert_eq!(replay(best, &input), Value::Text(PROSE.into()));
+        }
+    }
+
+    #[test]
+    fn a_json_web_token_is_opened() {
+        let token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.\
+            eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.\
+            SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+        let proposals = suggest(&Value::Text(token.into()));
+        assert_eq!(ops_of(&proposals[0]), ["jwt-decode"]);
+    }
+
+    #[test]
     fn large_input_is_sampled_and_the_steps_still_apply_to_all_of_it() {
         let long = PROSE.repeat(4000);
         let entry = ops::find("base64-standard-encode").unwrap();

@@ -1,13 +1,19 @@
 //! Every operation, and the one list that registers them.
 
+pub mod aes;
 pub mod analysis;
 pub mod base64;
 pub mod caesar;
+pub mod compress;
 pub mod encoding;
 pub mod hash;
+pub mod json;
+pub mod key;
+pub mod mac;
 pub mod number_base;
 pub mod regex;
 pub mod text;
+pub mod time;
 pub mod url;
 pub mod xor;
 
@@ -17,7 +23,12 @@ use wasm_bindgen::prelude::*;
 
 use crate::core::{entry, NoConfig, Op, OpEntry};
 use base64::{Base64StandardDecode, Base64StandardEncode, Base64UrlDecode, Base64UrlEncode};
+use aes::{AesConfig, AesDecrypt, AesEncrypt};
 use analysis::{DetectFileType, Entropy};
+use compress::{Gunzip, Gzip, RawDeflate, RawInflate, ZlibDeflate, ZlibInflate};
+use json::{JsonFormat, JsonFormatConfig, JsonMinify, JwtDecode};
+use mac::{Crc32, HmacConfig, HmacOp};
+use time::{FromUnixTimestamp, TimestampConfig, ToUnixTimestamp};
 use caesar::{Atbash, CaesarCipher, CaesarConfig, Rot13, Vigenere, VigenereConfig};
 use hash::{Md5Hash, Sha1Hash, Sha256, Sha512};
 use number_base::{FromBinary, FromDecimal, FromOctal, ToBinary, ToDecimal, ToOctal};
@@ -105,6 +116,21 @@ ops! {
     "from-decimal" => FromDecimal: NoConfig,
     "detect-file-type" => DetectFileType: NoConfig,
     "entropy" => Entropy: NoConfig,
+    "gzip" => Gzip: NoConfig,
+    "gunzip" => Gunzip: NoConfig,
+    "zlib-deflate" => ZlibDeflate: NoConfig,
+    "zlib-inflate" => ZlibInflate: NoConfig,
+    "raw-deflate" => RawDeflate: NoConfig,
+    "raw-inflate" => RawInflate: NoConfig,
+    "aes-encrypt" => AesEncrypt: AesConfig,
+    "aes-decrypt" => AesDecrypt: AesConfig,
+    "hmac" => HmacOp: HmacConfig,
+    "crc32" => Crc32: NoConfig,
+    "json-format" => JsonFormat: JsonFormatConfig,
+    "json-minify" => JsonMinify: NoConfig,
+    "jwt-decode" => JwtDecode: NoConfig,
+    "from-unix-timestamp" => FromUnixTimestamp: TimestampConfig,
+    "to-unix-timestamp" => ToUnixTimestamp: TimestampConfig,
 }
 
 pub fn find(id: &str) -> Option<&'static OpEntry> {

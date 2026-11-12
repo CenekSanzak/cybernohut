@@ -23,13 +23,21 @@ base85 = "1.0.0"
 md-5 = "0.10.6"
 sha1 = "0.10.6"
 sha2 = "0.10.6"
-serde_json = "1.0.138"
+serde_json = { version = "1.0.138", features = ["preserve_order", "arbitrary_precision"] }
 js-sys = "0.3.77"
 serde = { version = "1.0.229", features = ["derive"] }
 tsify = "0.5.8"
 base64-simd = "0.8.0"
 hex-simd = "0.8.0"
 regex-lite = "0.1.9"
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+crc32fast = "1.5"
+hmac = "0.12"
+aes = "0.8"
+cbc = { version = "0.1", features = ["alloc"] }
+ecb = { version = "0.1", features = ["alloc"] }
+ctr = "0.9"
+aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.34"

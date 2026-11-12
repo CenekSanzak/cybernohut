@@ -68,6 +68,10 @@ pub enum Tag {
     #[serde(rename = "Substitution Cipher")]
     SubstitutionCipher,
     Analysis,
+    Compression,
+    Encryption,
+    #[serde(rename = "Data Format")]
+    DataFormat,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]

@@ -4,13 +4,8 @@ use tsify::Tsify;
 use crate::core::{Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
 use crate::score::text_score;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
-#[serde(rename_all = "lowercase")]
-pub enum KeyFormat {
-    #[default]
-    Text,
-    Hex,
-}
+pub use super::key::KeyFormat;
+use super::key::parse_key;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(default, rename_all = "camelCase")]
@@ -18,21 +13,6 @@ pub struct XorConfig {
     pub key: String,
     /// Whether `key` is literal text or hexadecimal bytes.
     pub key_format: KeyFormat,
-}
-
-fn key_bytes(config: &XorConfig) -> Result<Vec<u8>, OpError> {
-    let key = match config.key_format {
-        KeyFormat::Text => config.key.as_bytes().to_vec(),
-        KeyFormat::Hex => {
-            let compact: String = config.key.chars().filter(|c| !c.is_ascii_whitespace()).collect();
-            hex_simd::decode_to_vec(compact.as_bytes())
-                .map_err(|_| OpError::invalid_config("The key is not valid hexadecimal"))?
-        }
-    };
-    if key.is_empty() {
-        return Err(OpError::invalid_config("Enter a key"));
-    }
-    Ok(key)
 }
 
 /// XOR with a repeating key. Applying it twice with the same key undoes it.
@@ -84,7 +64,7 @@ impl Op for Xor {
     }
 
     fn run(config: &XorConfig, input: &[u8]) -> Result<Vec<u8>, OpError> {
-        let key = key_bytes(config)?;
+        let key = parse_key(&config.key, config.key_format)?;
         Ok(input.iter().zip(key.iter().cycle()).map(|(byte, key)| byte ^ key).collect())
     }
 }

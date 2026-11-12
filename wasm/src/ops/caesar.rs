@@ -12,16 +12,21 @@ pub struct CaesarConfig {
     pub known_part: String,
 }
 
-fn shift_char(c: char, shift: i32) -> char {
-    if !c.is_ascii_alphabetic() {
-        return c;
-    }
-    let base = if c.is_ascii_uppercase() { b'A' } else { b'a' } as i32;
-    ((c as i32 - base + shift).rem_euclid(26) + base) as u8 as char
-}
-
+/// Shifts ASCII letters and leaves every other byte alone. Working on bytes is valid
+/// because all bytes of a multi-byte UTF-8 character are above the ASCII range, so
+/// they are never touched and the result is still UTF-8.
 fn shift_text(text: &str, shift: i32) -> String {
-    text.chars().map(|c| shift_char(c, shift)).collect()
+    let shift = shift.rem_euclid(26) as u8;
+    let mut bytes = text.as_bytes().to_vec();
+    for byte in &mut bytes {
+        let base = match *byte {
+            b'a'..=b'z' => b'a',
+            b'A'..=b'Z' => b'A',
+            _ => continue,
+        };
+        *byte = (*byte - base + shift) % 26 + base;
+    }
+    String::from_utf8(bytes).expect("shifting ASCII letters keeps the text valid UTF-8")
 }
 
 pub struct CaesarCipher;
@@ -89,6 +94,11 @@ mod tests {
     fn shifts_letters_and_leaves_the_rest() {
         assert_eq!(CaesarCipher::run(&config(13, ""), "Hello, World!").unwrap(), "Uryyb, Jbeyq!");
         assert_eq!(CaesarCipher::run(&config(-13, ""), "Uryyb, Jbeyq!").unwrap(), "Hello, World!");
+    }
+
+    #[test]
+    fn non_ascii_text_passes_through_untouched() {
+        assert_eq!(CaesarCipher::run(&config(1, ""), "çay 🌰 abz").unwrap(), "çbz 🌰 bca");
     }
 
     #[test]

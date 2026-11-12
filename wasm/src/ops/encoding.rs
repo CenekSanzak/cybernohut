@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
-use data_encoding::{Encoding, BASE32, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
+use data_encoding::{Encoding, BASE32};
+use hex_simd::AsciiCase;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
@@ -66,8 +67,8 @@ impl Op for Base16Encode {
     }
 
     fn run(config: &HexEncodeConfig, input: &[u8]) -> Result<String, OpError> {
-        let encoding = if config.uppercase { &HEXUPPER } else { &HEXLOWER };
-        Ok(encode_chunked(encoding, 1, input))
+        let case = if config.uppercase { AsciiCase::Upper } else { AsciiCase::Lower };
+        Ok(hex_simd::encode_to_string(input, case))
     }
 }
 
@@ -85,8 +86,8 @@ impl Op for Base16Decode {
     type Out = Vec<u8>;
 
     fn run(_: &NoConfig, input: &str) -> Result<Vec<u8>, OpError> {
-        decode_chunked(&HEXLOWER_PERMISSIVE, 2, compact(input).as_bytes())
-            .map_err(|e| OpError::invalid_input(format!("Not valid hexadecimal: {e}")))
+        hex_simd::decode_to_vec(compact(input).as_bytes())
+            .map_err(|_| OpError::invalid_input("Not valid hexadecimal"))
     }
 }
 
@@ -190,10 +191,10 @@ mod tests {
 
     #[test]
     fn chunking_does_not_change_the_result() {
-        // Longer than one chunk for both encodings, and not block-aligned.
+        // Longer than one Base32 chunk, and not block-aligned.
         let bytes: Vec<u8> = (0..5 * CHUNK_BLOCKS + 7).map(|i| (i % 251) as u8).collect();
         let hex = Base16Encode::run(&HexEncodeConfig::default(), &bytes).unwrap();
-        assert_eq!(hex, HEXLOWER.encode(&bytes));
+        assert_eq!(hex.len(), bytes.len() * 2);
         assert_eq!(Base16Decode::run(&NoConfig {}, &hex).unwrap(), bytes);
         let b32 = Base32Encode::run(&NoConfig {}, &bytes).unwrap();
         assert_eq!(b32, BASE32.encode(&bytes));

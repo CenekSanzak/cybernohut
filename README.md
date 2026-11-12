@@ -70,26 +70,27 @@ impl Op for Reverse {
 
 ## Performance
 
-The engine is not faster than the browser's own built-ins, and the app does not claim
-to be. The [benchmark page](bench.html) runs each pipeline in the engine and with the
-fastest native equivalent, checks that both produce identical bytes, and reports the
-median. One run on a 10 MB input, in a Chromium-based browser on macOS:
+The engine is faster than the browser's own built-ins in some places and slower in
+others, and the app does not claim more than that. The [benchmark page](bench.html)
+runs each pipeline in the engine and with the fastest native equivalent, checks that
+both produce identical bytes, and reports the median. One run on a 10 MB input, in a
+Chromium-based browser on macOS:
 
 | Pipeline | Engine (ms) | Native (ms) | Engine is |
 | --- | ---: | ---: | --- |
-| SHA-256 | 19.3 | 3.8 | 5.1× slower |
-| Base64 encode | 5.3 | 0.9 | 5.9× slower |
-| Base64 decode | 12.2 | 4.4 | 2.8× slower |
-| Hex encode | 6.0 | 3.2 | 1.9× slower |
-| Caesar shift 3 | 19.7 | 16.5 | 1.2× slower |
-| Uppercase, then reverse | 16.8 | 62.9 | 3.7× faster |
-| Base64 encode → decode → hex → SHA-256 | 60.2 | 32.0 | 1.9× slower |
+| SHA-256 | 18.9 | 3.8 | 5.0× slower |
+| Base64 encode | 1.6 | 1.0 | 1.6× slower |
+| Base64 decode | 7.6 | 4.5 | 1.7× slower |
+| Hex encode | 0.6 | 3.4 | 5.7× faster |
+| Caesar shift 3 | 5.4 | 16.8 | 3.1× faster |
+| Uppercase, then reverse | 14.1 | 64.1 | 4.5× faster |
+| Base64 encode → decode → hex → SHA-256 | 47.4 | 30.6 | 1.5× slower |
 
-Web Crypto and the `Uint8Array` Base64/hex methods are native code, often using CPU
-instructions that WebAssembly cannot reach. What the Rust core buys is one typed
-definition per operation, correct handling of binary data, an engine that runs off the
-main thread and survives running out of memory, and operations the browser does not
-have at all (MD5, Base32, Base85).
+SHA-256 in Web Crypto uses dedicated CPU instructions that WebAssembly cannot reach,
+and it dominates the chained pipeline. Base64 and hex use WebAssembly SIMD. Beyond
+speed, the Rust core gives one typed definition per operation, correct handling of
+binary data, an engine that runs off the main thread and survives running out of
+memory, and operations the browser does not have at all (MD5, Base32, Base85).
 
 ## Getting Started
 

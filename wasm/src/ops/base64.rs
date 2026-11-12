@@ -1,19 +1,17 @@
-use base64::engine::general_purpose::{STANDARD, URL_SAFE};
-use base64::engine::GeneralPurpose;
-use base64::Engine as _;
+use base64_simd::{Base64, STANDARD, URL_SAFE};
 
 use crate::core::{NoConfig, Op, OpError, Tag};
 
-fn decode(engine: &GeneralPurpose, input: &str) -> Result<Vec<u8>, OpError> {
+fn decode(engine: &Base64, input: &str) -> Result<Vec<u8>, OpError> {
     // Encoded data is routinely wrapped or padded with whitespace; it carries no meaning.
     // Copying the input to strip it is only worth it when there is some.
     let decoded = if input.bytes().any(|byte| byte.is_ascii_whitespace()) {
         let compact: Vec<u8> = input.bytes().filter(|byte| !byte.is_ascii_whitespace()).collect();
-        engine.decode(compact)
+        engine.decode_to_vec(compact)
     } else {
-        engine.decode(input)
+        engine.decode_to_vec(input)
     };
-    decoded.map_err(|e| OpError::invalid_input(format!("Not valid Base64: {e}")))
+    decoded.map_err(|_| OpError::invalid_input("Not valid Base64"))
 }
 
 macro_rules! base64_ops {
@@ -32,7 +30,7 @@ macro_rules! base64_ops {
             type Out = String;
 
             fn run(_: &NoConfig, input: &[u8]) -> Result<String, OpError> {
-                Ok($engine.encode(input))
+                Ok($engine.encode_to_string(input))
             }
         }
 

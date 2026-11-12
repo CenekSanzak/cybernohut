@@ -1,0 +1,4 @@
+# Fixed-width SIMD is supported by every current browser. The Base64 and hex
+# implementations select their vectorized paths at compile time from this flag.
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

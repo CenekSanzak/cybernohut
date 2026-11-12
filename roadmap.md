@@ -12,9 +12,10 @@
 
 ## Next
 
-1. **Close the gap where it is cheap.** The benchmark shows the engine behind the
-   browser's built-ins on hashing and Base64. Candidates: SIMD Base64 and hex, and
-   skipping the copies between steps that only reinterpret data (text to bytes).
+1. **Share buffers between steps.** Steps that only reinterpret data, such as decoding
+   bytes as UTF-8 text, copy it today. Sharing one buffer would remove that cost, which
+   shows up in the Base64 decode benchmark. SHA-256 stays behind Web Crypto, which has
+   CPU instructions WebAssembly cannot use.
 2. **More operations.** XOR, URL encoding, regex extract/replace, number-base
    conversions, magic-byte detection.
 3. **Auto mode.** A search over operations that proposes decoding steps for unknown

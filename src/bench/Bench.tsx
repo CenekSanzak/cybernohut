@@ -171,10 +171,10 @@ export function Bench() {
             memory.
           </p>
           <p>
-            Expect the engine to lose wherever the browser has a built-in written in
-            optimized native code: SHA-256 in Web Crypto, and Base64 and hex on
-            Uint8Array in recent browsers. It tends to win where the JavaScript
-            equivalent has to build strings piece by piece, such as reversing text.
+            Expect the engine to lose where the browser has a built-in backed by CPU
+            instructions WebAssembly cannot use, above all SHA-256 in Web Crypto. It
+            tends to win where the JavaScript equivalent has to loop over bytes or build
+            strings piece by piece.
           </p>
         </section>
       </div>

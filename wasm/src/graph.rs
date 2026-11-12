@@ -76,7 +76,7 @@ pub struct OutputPreview {
     pub port: String,
     #[serde(rename = "type")]
     pub ty: ValueType,
-    /// Characters for text, bytes for bytes, items for lists, 1 for a number.
+    /// Bytes for text and bytes, items for lists, 1 for a number.
     pub size: usize,
     pub preview: String,
     pub truncated: bool,
@@ -285,18 +285,40 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")
 }
 
+/// The longest prefix of `bytes` that is enough to preview `max_chars` characters, as
+/// text if it is valid UTF-8. Only the prefix is examined: a preview is made for every
+/// output of every run, so it must not scan values that can be hundreds of megabytes.
+fn text_prefix(bytes: &[u8], max_chars: usize) -> Option<&str> {
+    // A character is at most four bytes; one more is enough to tell if there is more.
+    let window = &bytes[..bytes.len().min((max_chars + 1) * 4)];
+    match std::str::from_utf8(window) {
+        Ok(text) => Some(text),
+        // The window ended in the middle of a character: everything before it is fine.
+        Err(error) if error.error_len().is_none() && window.len() < bytes.len() => {
+            std::str::from_utf8(&window[..error.valid_up_to()]).ok()
+        }
+        Err(_) => None,
+    }
+}
+
 fn preview(port: &str, value: &Value, max_chars: usize) -> OutputPreview {
+    let text_preview = |bytes: &[u8]| {
+        text_prefix(bytes, max_chars).map(|prefix| {
+            let (shown, cut) = truncate_chars(prefix, max_chars);
+            (shown, cut || prefix.len() < bytes.len())
+        })
+    };
     let (size, (preview, truncated)) = match value {
-        Value::Text(text) => (text.chars().count(), truncate_chars(text, max_chars)),
+        Value::Text(text) => (
+            text.len(),
+            text_preview(text.as_bytes()).expect("a prefix of text cut at a boundary is text"),
+        ),
         Value::Bytes(bytes) => (
             bytes.len(),
-            match std::str::from_utf8(bytes) {
-                Ok(text) => truncate_chars(text, max_chars),
-                Err(_) => {
-                    let shown = bytes.len().min(max_chars / 3);
-                    (hex(&bytes[..shown]), shown < bytes.len())
-                }
-            },
+            text_preview(bytes).unwrap_or_else(|| {
+                let shown = bytes.len().min(max_chars / 3);
+                (hex(&bytes[..shown]), shown < bytes.len())
+            }),
         ),
         Value::Number(number) => (1, (number.to_string(), false)),
         Value::TextList(items) => (items.len(), (format!("{} items", items.len()), false)),
@@ -615,6 +637,21 @@ mod tests {
         let NodeReport::Ok { outputs, .. } = &report[0] else { panic!("expected ok") };
         assert_eq!(outputs[0].preview, "ççç");
         assert!(outputs[0].truncated);
-        assert_eq!(outputs[0].size, 6);
+        assert_eq!(outputs[0].size, 12);
+    }
+
+    #[test]
+    fn previews_examine_only_the_start_of_a_value() {
+        // Valid text followed, far past the preview, by bytes that are not UTF-8.
+        let mut bytes = "nohut ".repeat(100).into_bytes();
+        bytes.extend([0xff, 0xfe]);
+        let shown = preview("output", &Value::Bytes(bytes), 8);
+        assert_eq!((shown.preview.as_str(), shown.truncated), ("nohut no", true));
+
+        let exact = preview("output", &Value::Text("çay".into()), 3);
+        assert_eq!((exact.preview.as_str(), exact.truncated), ("çay", false));
+
+        let binary = preview("output", &Value::Bytes(vec![0xff, 0x00, 0x10]), 60);
+        assert_eq!((binary.preview.as_str(), binary.truncated), ("ff 00 10", false));
     }
 }

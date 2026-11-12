@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{Op, OpError, ParamKind, ParamSpec, Tag};
+use crate::core::{Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
+use crate::score::text_score;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
 #[serde(rename_all = "lowercase")]
@@ -59,6 +60,29 @@ impl Op for Xor {
         ]
     }
 
+    /// Tries every single-byte key on the start of the input and offers the one that
+    /// turns it into clearly readable text. Longer keys are not searched for.
+    fn detect(input: &[u8]) -> Option<Suggestion<XorConfig>> {
+        let sample = &input[..input.len().min(2048)];
+        if sample.len() < 8 {
+            return None;
+        }
+        let before = std::str::from_utf8(sample).map_or(0.0, text_score);
+        let (key, after) = (1..=255u8)
+            .filter_map(|key| {
+                let decoded: Vec<u8> = sample.iter().map(|byte| byte ^ key).collect();
+                Some((key, text_score(std::str::from_utf8(&decoded).ok()?)))
+            })
+            .max_by(|a, b| a.1.total_cmp(&b.1))?;
+        (after >= 0.7 && after >= before + 0.15).then(|| Suggestion {
+            config: XorConfig { key: format!("{key:02x}"), key_format: KeyFormat::Hex },
+            reason: format!(
+                "XOR with the single byte 0x{key:02x} gives readable text \
+                 (readability goes from {before:.2} to {after:.2})"
+            ),
+        })
+    }
+
     fn run(config: &XorConfig, input: &[u8]) -> Result<Vec<u8>, OpError> {
         let key = key_bytes(config)?;
         Ok(input.iter().zip(key.iter().cycle()).map(|(byte, key)| byte ^ key).collect())
@@ -87,6 +111,16 @@ mod tests {
         let once = Xor::run(&config, b"nohut").unwrap();
         assert_ne!(once, b"nohut");
         assert_eq!(Xor::run(&config, &once).unwrap(), b"nohut");
+    }
+
+    #[test]
+    fn detection_recovers_a_single_byte_key() {
+        let prose = b"The secret message is hidden in the last file that you will find here.";
+        let encrypted = Xor::run(&config("5a", KeyFormat::Hex), prose).unwrap();
+        let suggestion = Xor::detect(&encrypted).expect("a key is suggested");
+        assert_eq!(suggestion.config, config("5a", KeyFormat::Hex));
+        assert!(Xor::detect(prose).is_none(), "plain text needs no key");
+        assert!(Xor::detect(&[0x13, 0x37]).is_none(), "too short to judge");
     }
 
     #[test]

@@ -17,6 +17,11 @@ A visual toolkit for transforming data: encodings, hashes and classic ciphers, w
   text adds a visible "Decode Text (UTF-8)" step rather than converting silently.
 - **Runs off the main thread.** Evaluation happens in a Web Worker. A newer run cancels
   the one in flight, and an out-of-memory crash restarts the engine instead of the page.
+- **Auto mode that shows its work.** "Suggest decoding steps" searches for the chain
+  of operations that turns a value into something readable: layered Base64, hex, URL
+  and number encodings, Caesar and ROT13 shifts, single-byte XOR. The answer is added to
+  the graph as ordinary nodes, each labelled with why it was chosen, so it can be read,
+  changed and reused on other input.
 - **Files in, files out.** A file node feeds raw bytes into a graph without going
   through text, and any output can be downloaded. File content is not saved with the
   graph.
@@ -41,7 +46,9 @@ Any single-input operation that produces text can also be run line by line.
 wasm/src/core    Value, the Op trait, errors: the contract every operation implements
 wasm/src/ops     one file per family of operations, plus the list that registers them
 wasm/src/graph   evaluates a whole graph: ordering, type checks, per-node reports
-wasm/src/api     the wasm boundary: catalog(), evaluate(), output_text(), can_connect()
+wasm/src/auto    auto mode: the search over operations' detect() hooks
+wasm/src/score   how readable a value is, which is what the search optimizes
+wasm/src/api     the wasm boundary: catalog(), evaluate(), suggest(), output_text()
 src/engine       the generated types, the worker and the page's client for it
 src/graph        the graph as data, persistence, and the evaluation hooks
 src/components   the React UI, driven entirely by the catalog

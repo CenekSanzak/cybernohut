@@ -13,6 +13,7 @@ use std::rc::Rc;
 use tsify::Ts;
 use wasm_bindgen::prelude::*;
 
+use crate::auto::{self, Proposal};
 use crate::core::{OpMeta, Value, ValueType};
 use crate::graph::{self, Evaluation, Graph, NodeReport, OutputText, Sources};
 use crate::ops;
@@ -72,6 +73,21 @@ pub fn output_text(node_id: &str, port: &str, max_chars: usize) -> Result<Option
             .output(node_id, port)
             .map(|value| Ts::from_rust(&graph::display(value, max_chars)).map_err(to_js_error))
             .transpose()
+    })
+}
+
+/// Auto mode: chains of decoding steps that make a node's output more readable, best
+/// first. Empty when the output is already as readable as anything reachable from it.
+#[wasm_bindgen]
+pub fn suggest(node_id: &str, port: &str) -> Result<Vec<Ts<Proposal>>, JsError> {
+    LAST.with(|last| {
+        last.borrow()
+            .output(node_id, port)
+            .map(auto::suggest)
+            .unwrap_or_default()
+            .iter()
+            .map(|proposal| Ts::from_rust(proposal).map_err(to_js_error))
+            .collect()
     })
 }
 

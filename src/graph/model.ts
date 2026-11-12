@@ -20,6 +20,8 @@ export type OpNodeData = {
     opId: K;
     config: Required<OpConfigMap[K]>;
     perLine: boolean;
+    /** Why auto mode added this step. Absent on nodes the user added. */
+    note?: string;
   };
 }[OpId];
 

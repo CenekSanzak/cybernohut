@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Tag};
+use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
 
 const LINK: &str = "https://en.wikipedia.org/wiki/Percent-encoding";
 const HEX: &[u8; 16] = b"0123456789ABCDEF";
@@ -67,6 +67,17 @@ impl Op for UrlDecode {
         vec![ParamSpec::new("plusAsSpace", "Treat + as space", ParamKind::Bool)]
     }
 
+    fn detect(input: &str) -> Option<Suggestion<UrlDecodeConfig>> {
+        let bytes = input.as_bytes();
+        let escapes = bytes
+            .windows(3)
+            .filter(|w| w[0] == b'%' && hex_digit(w[1]).is_some() && hex_digit(w[2]).is_some())
+            .count();
+        // Every % must start an escape, or decoding would fail.
+        (escapes > 0 && escapes == bytes.iter().filter(|byte| **byte == b'%').count())
+            .then(|| Suggestion::new(format!("Contains {escapes} percent-escapes such as %20")))
+    }
+
     fn run(config: &UrlDecodeConfig, input: &str) -> Result<Vec<u8>, OpError> {
         let bytes = input.as_bytes();
         let mut output = Vec::with_capacity(bytes.len());
@@ -123,6 +134,13 @@ mod tests {
         let decode = |plus_as_space| UrlDecode::run(&UrlDecodeConfig { plus_as_space }, "a+b%2B").unwrap();
         assert_eq!(decode(false), b"a+b+");
         assert_eq!(decode(true), b"a b+");
+    }
+
+    #[test]
+    fn detection_needs_well_formed_escapes() {
+        assert!(UrlDecode::detect("a%20b%26c").is_some());
+        assert!(UrlDecode::detect("plain text").is_none());
+        assert!(UrlDecode::detect("50% off, 100%").is_none());
     }
 
     #[test]

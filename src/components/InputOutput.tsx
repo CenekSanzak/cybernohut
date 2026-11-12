@@ -1,4 +1,5 @@
 import React from "react";
+import type { Proposal } from "@/engine/wasm";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -9,12 +10,70 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
+/** Auto mode for the step whose output is on show. */
+export interface AutoMode {
+  /** Name of the step the proposals are for. */
+  target: string;
+  /** Whether that step has an output to analyse. */
+  ready: boolean;
+  busy: boolean;
+  /** Absent until asked for; empty when nothing would make the output more readable. */
+  proposals?: { proposal: Proposal; steps: string[] }[];
+  onSuggest: () => void;
+  onApply: (proposal: Proposal) => void;
+}
+
+function AutoPanel({ auto }: { auto: AutoMode }) {
+  return (
+    <div className="mb-2 text-sm">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={auto.onSuggest}
+          disabled={!auto.ready || auto.busy}
+          className="px-2 py-0.5 text-xs border rounded bg-white hover:bg-gray-100 disabled:opacity-50"
+        >
+          {auto.busy ? "Looking…" : "Suggest decoding steps"}
+        </button>
+        <span className="text-xs text-gray-500">for {auto.target}</span>
+      </div>
+      {auto.proposals?.length === 0 && (
+        <p className="mt-2 text-xs text-gray-600">
+          Nothing found that makes this more readable than it already is.
+        </p>
+      )}
+      {auto.proposals && auto.proposals.length > 0 && (
+        <ul className="mt-2 space-y-2" aria-label="Suggested decoding steps">
+          {auto.proposals.map(({ proposal, steps }) => (
+            <li key={steps.join(">")} className="p-2 bg-white border rounded">
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-xs font-medium">{steps.join(" → ")}</div>
+                <button
+                  type="button"
+                  onClick={() => auto.onApply(proposal)}
+                  className="shrink-0 px-2 py-0.5 text-xs text-white bg-blue-500 rounded hover:bg-blue-600"
+                >
+                  Add to graph
+                </button>
+              </div>
+              <div className="mt-1 text-xs text-gray-600 break-all line-clamp-2">
+                {proposal.preview}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 interface InputOutputProps {
   input: string;
   output: string;
   status: string;
   /** Saves the selected output; absent when there is nothing to save. */
   onDownload?: () => void;
+  auto?: AutoMode;
   onInputChange: (value: string) => void;
   calculate: () => void;
   autoCalculate: boolean;
@@ -32,6 +91,7 @@ const InputOutput = React.memo<InputOutputProps>(
     output,
     status,
     onDownload,
+    auto,
     onInputChange,
     calculate,
     autoCalculate,
@@ -140,6 +200,7 @@ const InputOutput = React.memo<InputOutputProps>(
               </button>
             </div>
           )}
+          {auto && <AutoPanel auto={auto} />}
           <Textarea
             value={output}
             readOnly

@@ -234,6 +234,9 @@ const CustomNode = ({ id, data, selected }: NodeProps<GraphNode>) => {
       <div className="mt-2 text-xs">
         <Result report={report} />
       </div>
+      {data.kind === "op" && data.note && (
+        <div className="mt-2 text-[11px] italic text-indigo-700">Suggested: {data.note}</div>
+      )}
       {data.kind === "op" && <Settings nodeId={id} data={data} />}
       {data.kind === "file" && <FilePicker nodeId={id} data={data} />}
       <Ports ports={outputPorts(data)} side="output" />

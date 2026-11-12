@@ -27,7 +27,31 @@ pub trait Op: 'static {
         Vec::new()
     }
 
+    /// Auto mode's question to a decoding operation: does this input look like
+    /// something you undo, and with which settings? The reason is shown to the user.
+    fn detect(_input: Self::In<'_>) -> Option<Suggestion<Self::Config>> {
+        None
+    }
+
     fn run(config: &Self::Config, input: Self::In<'_>) -> Result<Self::Out, OpError>;
+}
+
+/// An operation's offer to process an input, from [`Op::detect`].
+pub struct Suggestion<C> {
+    pub config: C,
+    pub reason: String,
+}
+
+impl<C: Default> Suggestion<C> {
+    pub fn new(reason: impl Into<String>) -> Self {
+        Suggestion { config: C::default(), reason: reason.into() }
+    }
+}
+
+/// A type-erased [`Suggestion`].
+pub struct Detection {
+    pub config: serde_json::Value,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
@@ -97,10 +121,11 @@ pub struct OpEntry {
     pub id: &'static str,
     pub meta: fn() -> OpMeta,
     pub run: fn(&serde_json::Value, &[&Value]) -> Result<Vec<Value>, OpError>,
+    pub detect: fn(&Value) -> Option<Detection>,
 }
 
 pub fn entry<T: Op>() -> OpEntry {
-    OpEntry { id: T::ID, meta: meta_of::<T>, run: run_erased::<T> }
+    OpEntry { id: T::ID, meta: meta_of::<T>, run: run_erased::<T>, detect: detect_erased::<T> }
 }
 
 fn ports(names: &[&str], types: Vec<ValueType>) -> Vec<Port> {
@@ -142,6 +167,21 @@ fn run_erased<'a, T: Op>(
     };
     let input = <T::In<'a> as Inputs<'a>>::extract(inputs)?;
     Ok(T::run(&config, input)?.into_values())
+}
+
+fn detect_erased<'a, T: Op>(input: &'a Value) -> Option<Detection> {
+    // Detection is about what the value is, so the implicit text-to-bytes conversion
+    // does not apply: a bytes operation is only asked about actual bytes.
+    let types = <T::In<'a> as Inputs<'a>>::types();
+    if types.len() != 1 || types[0] != input.value_type() {
+        return None;
+    }
+    let typed = <T::In<'a> as Inputs<'a>>::extract(&[input]).ok()?;
+    let suggestion = T::detect(typed)?;
+    Some(Detection {
+        config: serde_json::to_value(suggestion.config).ok()?,
+        reason: suggestion.reason,
+    })
 }
 
 /// Config type for operations that have nothing to configure.

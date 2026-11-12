@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from "react";
 import { engine } from "@/engine/client";
-import { catalog, isOpId } from "@/engine/wasm";
+import { catalog, getMeta, isOpId, type Proposal } from "@/engine/wasm";
 import { GraphDispatchContext, ReportsContext } from "@/graph/context";
 import { saveBytes } from "@/graph/files";
-import { nodeTitle, outputPorts } from "@/graph/model";
+import { nodeTitle, outputPorts, type ConfigRecord } from "@/graph/model";
 import {
   clearStorage,
   loadFromStorage,
@@ -12,7 +12,7 @@ import {
   type GraphSnapshot,
 } from "@/graph/persistence";
 import { useEvaluation, useNodeOutput } from "@/graph/useEvaluation";
-import { createInitialState, graphReducer } from "@/state/graphReducer";
+import { createInitialState, graphReducer, type ChainStep } from "@/state/graphReducer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphCanvas } from "./GraphCanvas";
 import { GraphControls } from "./GraphControls";
@@ -144,6 +144,54 @@ const Workspace: React.FC = () => {
     }
   }, [selectedNode, downloadable]);
 
+  // Auto mode works on the selected step, or on the input when no step is selected.
+  const autoTarget = selectedNode ?? selectedInput;
+  const autoReady = !!autoTarget && reports.get(autoTarget.id)?.status === "ok";
+  const [proposals, setProposals] = useState<Proposal[] | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+
+  // Proposals describe one value; forget them when it may have changed.
+  const autoTargetId = autoTarget?.id;
+  useEffect(() => setProposals(null), [autoTargetId, evaluation.version]);
+
+  const handleSuggest = useCallback(async () => {
+    if (!autoTarget) return;
+    setSuggesting(true);
+    try {
+      setProposals(await engine.suggest(autoTarget.id, outputPorts(autoTarget.data)[0].name));
+    } catch (error) {
+      console.error("Auto mode failed:", error);
+      setProposals([]);
+    } finally {
+      setSuggesting(false);
+    }
+  }, [autoTarget]);
+
+  const handleApply = useCallback(
+    (proposal: Proposal) => {
+      if (!autoTargetId) return;
+      const steps: ChainStep[] = proposal.steps.flatMap((step) =>
+        isOpId(step.op_id)
+          ? [{ opId: step.op_id, config: step.config as ConfigRecord, note: step.reason }]
+          : []
+      );
+      dispatch({ type: "ADD_CHAIN", anchorId: autoTargetId, steps });
+    },
+    [autoTargetId]
+  );
+
+  const auto = autoTarget && {
+    target: nodeTitle(autoTarget.data),
+    ready: autoReady,
+    busy: suggesting,
+    proposals: proposals?.map((proposal) => ({
+      proposal,
+      steps: proposal.steps.map((step) => (isOpId(step.op_id) ? getMeta(step.op_id).name : step.op_id)),
+    })),
+    onSuggest: handleSuggest,
+    onApply: handleApply,
+  };
+
   const status = evaluation.running
     ? "Calculating…"
     : evaluation.elapsedMs !== null
@@ -182,6 +230,7 @@ const Workspace: React.FC = () => {
                     output={output}
                     status={status}
                     onDownload={downloadable && handleDownload}
+                    auto={auto}
                     onInputChange={handleInputChange}
                     calculate={run}
                     autoCalculate={autoCalculate}

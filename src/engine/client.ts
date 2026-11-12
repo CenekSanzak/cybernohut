@@ -5,7 +5,7 @@
  * running, the worker is replaced: that cancels the running work immediately instead
  * of queueing behind it. The same replacement recovers from a crashed engine.
  */
-import type { Graph, NodeReport, OutputText } from "wasm";
+import type { Graph, NodeReport, OutputText, Proposal } from "wasm";
 import type {
   EngineNotice,
   EngineReady,
@@ -136,6 +136,13 @@ class Engine {
     const response = await this.request({ type: "output", nodeId, port });
     if (response.type !== "output") throw new Error("Unexpected engine response");
     return response.output;
+  }
+
+  /** Auto mode: decoding steps that would make a node's output more readable. */
+  async suggest(nodeId: string, port: string): Promise<Proposal[]> {
+    const response = await this.request({ type: "suggest", nodeId, port });
+    if (response.type !== "suggested") throw new Error("Unexpected engine response");
+    return response.proposals;
   }
 
   /** The complete output of a node from the most recent evaluation, for saving. */

@@ -1,6 +1,6 @@
 //! Bytes written out as numbers in base 2, 8 or 10, and back.
 
-use crate::core::{NoConfig, Op, OpError, Tag};
+use crate::core::{NoConfig, Op, OpError, Suggestion, Tag};
 
 fn encode(input: &[u8], format: fn(u8) -> String) -> String {
     input.iter().map(|byte| format(*byte)).collect::<Vec<_>>().join(" ")
@@ -26,8 +26,19 @@ fn decode(input: &str, radix: u32, name: &str) -> Result<Vec<u8>, OpError> {
     Ok(output)
 }
 
+/// Numbers of the base, separated, and enough of them to be data rather than a number.
+fn looks_like_numbers(input: &str, radix: u32) -> bool {
+    let tokens: Vec<&str> =
+        input.split(|c: char| !c.is_ascii_alphanumeric()).filter(|t| !t.is_empty()).collect();
+    let digits: usize = tokens.iter().map(|token| token.len()).sum();
+    let unbroken_binary = radix == 2 && tokens.len() == 1 && digits >= 16;
+    (tokens.len() >= 3 || unbroken_binary)
+        && input.chars().all(|c| c.is_digit(radix) || !c.is_ascii_alphanumeric())
+        && decode(input, radix, "").is_ok()
+}
+
 macro_rules! base_ops {
-    ($to:ident, $from:ident, $id:literal, $label:literal, $radix:literal, $format:expr) => {
+    ($to:ident, $from:ident, $id:literal, $label:literal, $radix:literal, $format:expr, $detect:expr) => {
         pub struct $to;
 
         impl Op for $to {
@@ -59,6 +70,11 @@ macro_rules! base_ops {
             type In<'a> = &'a str;
             type Out = Vec<u8>;
 
+            fn detect(input: &str) -> Option<Suggestion<NoConfig>> {
+                let reason: Option<&'static str> = $detect;
+                (looks_like_numbers(input, $radix)).then_some(reason?).map(Suggestion::new)
+            }
+
             fn run(_: &NoConfig, input: &str) -> Result<Vec<u8>, OpError> {
                 decode(input, $radix, $id)
             }
@@ -66,9 +82,27 @@ macro_rules! base_ops {
     };
 }
 
-base_ops!(ToBinary, FromBinary, "binary", "Binary", 2, |byte| format!("{byte:08b}"));
-base_ops!(ToOctal, FromOctal, "octal", "Octal", 8, |byte| format!("{byte:o}"));
-base_ops!(ToDecimal, FromDecimal, "decimal", "Decimal", 10, |byte| byte.to_string());
+base_ops!(
+    ToBinary,
+    FromBinary,
+    "binary",
+    "Binary",
+    2,
+    |byte| format!("{byte:08b}"),
+    Some("Only 0s and 1s, in groups of up to eight")
+);
+// Octal is not offered automatically: any run of small decimal numbers is also valid
+// octal, and decimal is far more common.
+base_ops!(ToOctal, FromOctal, "octal", "Octal", 8, |byte| format!("{byte:o}"), None);
+base_ops!(
+    ToDecimal,
+    FromDecimal,
+    "decimal",
+    "Decimal",
+    10,
+    |byte| byte.to_string(),
+    Some("A list of numbers from 0 to 255")
+);
 
 #[cfg(test)]
 mod tests {
@@ -98,6 +132,17 @@ mod tests {
         assert_eq!(FromDecimal::run(&NoConfig {}, "104,105\n33").unwrap(), b"hi!");
         assert_eq!(FromBinary::run(&NoConfig {}, "0110100001101001").unwrap(), b"hi");
         assert_eq!(FromBinary::run(&NoConfig {}, "1101000 1101001").unwrap(), b"hi");
+    }
+
+    #[test]
+    fn detection_wants_several_numbers_in_range() {
+        assert!(FromBinary::detect("01101000 01101001 00100001").is_some());
+        assert!(FromBinary::detect("0110100001101001").is_some());
+        assert!(FromBinary::detect("1010").is_none());
+        assert!(FromDecimal::detect("104, 105, 33").is_some());
+        assert!(FromDecimal::detect("104 105 300").is_none());
+        assert!(FromDecimal::detect("2024").is_none(), "a single number is not data");
+        assert!(FromOctal::detect("150 151 41").is_none());
     }
 
     #[test]

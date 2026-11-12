@@ -15,6 +15,7 @@ import {
   createOpNode,
   inputPorts,
   outputPorts,
+  type ConfigRecord,
   type GraphNode,
   type NodeData,
 } from "@/graph/model";
@@ -27,6 +28,7 @@ export type GraphAction =
   | { type: "ADD_FILE" }
   | { type: "SET_FILE"; nodeId: string; name: string; size: number }
   | { type: "ADD_OP"; opId: OpId }
+  | { type: "ADD_CHAIN"; anchorId: string; steps: ChainStep[] }
   | { type: "CONNECT"; connection: Connection }
   | { type: "SET_INPUT_TEXT"; nodeId: string; text: string }
   | { type: "SET_CONFIG"; nodeId: string; key: string; value: string | number | boolean }
@@ -35,6 +37,13 @@ export type GraphAction =
   | { type: "APPLY_NODE_CHANGES"; changes: NodeChange<GraphNode>[] }
   | { type: "APPLY_EDGE_CHANGES"; changes: EdgeChange[] }
   | { type: "LOAD"; snapshot: GraphSnapshot };
+
+/** One step of a chain proposed by auto mode. */
+export interface ChainStep {
+  opId: OpId;
+  config: ConfigRecord;
+  note: string;
+}
 
 export function createInitialState(): GraphState {
   return {
@@ -146,6 +155,40 @@ function addOp(state: GraphState, opId: OpId): GraphState {
   });
 }
 
+/**
+ * Adds a proposed chain under the anchor, each step wired to the one before. The steps
+ * become ordinary nodes; the note on each records why it was proposed.
+ */
+function addChain(state: GraphState, anchorId: string, steps: ChainStep[]): GraphState {
+  let previous = state.nodes.find((node) => node.id === anchorId);
+  if (!previous) return state;
+  // Beside the anchor's existing column, so the chain does not land on other nodes.
+  const taken = state.edges.filter((edge) => edge.source === anchorId).length;
+  let position = below(previous, taken * 280);
+  let next = state;
+
+  for (const step of steps) {
+    const node = createOpNode(step.opId, position);
+    const data = node.data as Extract<NodeData, { kind: "op" }>;
+    node.data = { ...data, config: { ...data.config, ...step.config }, note: step.note } as NodeData;
+    next = { ...next, nodes: [...next.nodes, node], selectedNodeId: node.id };
+
+    const sourcePort = outputPorts(previous.data)[0];
+    const targetPort = inputPorts(node.data)[0];
+    if (sourcePort && targetPort) {
+      next = connect(next, {
+        source: previous.id,
+        sourceHandle: sourcePort.name,
+        target: node.id,
+        targetHandle: targetPort.name,
+      });
+    }
+    previous = node;
+    position = { x: position.x, y: position.y + 170 };
+  }
+  return next;
+}
+
 /** Where a new input or file node goes: to the right of the last one. */
 function nextSourcePosition(state: GraphState): XYPosition {
   const sources = state.nodes.filter((node) => node.data.kind !== "op");
@@ -184,6 +227,9 @@ export function graphReducer(state: GraphState, action: GraphAction): GraphState
 
     case "ADD_OP":
       return addOp(state, action.opId);
+
+    case "ADD_CHAIN":
+      return addChain(state, action.anchorId, action.steps);
 
     case "CONNECT":
       return connect(state, action.connection);

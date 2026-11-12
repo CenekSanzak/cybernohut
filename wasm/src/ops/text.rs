@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Tag};
+use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(default)]
@@ -27,6 +27,11 @@ impl Op for Utf8Decode {
 
     fn params() -> Vec<ParamSpec> {
         vec![ParamSpec::new("lossy", "Replace invalid bytes", ParamKind::Bool)]
+    }
+
+    fn detect(input: &[u8]) -> Option<Suggestion<Utf8DecodeConfig>> {
+        (!input.is_empty() && std::str::from_utf8(input).is_ok())
+            .then(|| Suggestion::new("The bytes are valid UTF-8 text"))
     }
 
     fn run(config: &Utf8DecodeConfig, input: &[u8]) -> Result<String, OpError> {

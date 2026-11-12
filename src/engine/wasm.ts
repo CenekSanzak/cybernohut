@@ -24,6 +24,8 @@ export type {
   ParamKind,
   ParamSpec,
   Port,
+  Proposal,
+  ProposedStep,
   Tag,
   ValueType,
 } from "wasm";

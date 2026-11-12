@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Tag};
+use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
+use crate::score::text_score;
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(default, rename_all = "camelCase")]
@@ -29,6 +30,41 @@ fn shift_text(text: &str, shift: i32) -> String {
     String::from_utf8(bytes).expect("shifting ASCII letters keeps the text valid UTF-8")
 }
 
+/// How much better a rewritten text has to score before it is worth suggesting, and
+/// how readable it has to be in absolute terms.
+const MIN_GAIN: f64 = 0.15;
+const MIN_SCORE: f64 = 0.6;
+
+/// Substitution ciphers need some letters to say anything about.
+fn enough_letters(text: &str) -> bool {
+    text.bytes().filter(u8::is_ascii_alphabetic).take(8).count() == 8
+}
+
+/// The start of the text, which is all that is tried when looking for a shift.
+fn sample(text: &str) -> &str {
+    match text.char_indices().nth(2000) {
+        Some((end, _)) => &text[..end],
+        None => text,
+    }
+}
+
+/// The shift that makes the text most readable, if any makes it clearly readable.
+fn best_shift(text: &str) -> Option<(i32, f64, f64)> {
+    if !enough_letters(text) {
+        return None;
+    }
+    let sample = sample(text);
+    let before = text_score(sample);
+    let (shift, after) = (1..26)
+        .map(|shift| (shift, text_score(&shift_text(sample, shift))))
+        .max_by(|a, b| a.1.total_cmp(&b.1))?;
+    (after >= MIN_SCORE && after >= before + MIN_GAIN).then_some((shift, before, after))
+}
+
+fn readability(before: f64, after: f64) -> String {
+    format!("readability goes from {before:.2} to {after:.2}")
+}
+
 pub struct CaesarCipher;
 
 impl Op for CaesarCipher {
@@ -48,6 +84,18 @@ impl Op for CaesarCipher {
             ParamSpec::new("shift", "Shift", ParamKind::Int { min: Some(-25), max: Some(25) }),
             ParamSpec::new("knownPart", "Known plaintext", ParamKind::Text),
         ]
+    }
+
+    fn detect(input: &str) -> Option<Suggestion<CaesarConfig>> {
+        let (shift, before, after) = best_shift(input)?;
+        // A shift of 13 is ROT13, which offers itself.
+        (shift != 13).then(|| Suggestion {
+            config: CaesarConfig { shift, known_part: String::new() },
+            reason: format!(
+                "Shifting letters by {shift} gives readable text ({})",
+                readability(before, after)
+            ),
+        })
     }
 
     fn run(config: &CaesarConfig, input: &str) -> Result<String, OpError> {
@@ -77,6 +125,16 @@ impl Op for Rot13 {
     type In<'a> = &'a str;
     type Out = String;
 
+    fn detect(input: &str) -> Option<Suggestion<NoConfig>> {
+        let (shift, before, after) = best_shift(input)?;
+        (shift == 13).then(|| {
+            Suggestion::new(format!(
+                "Rotating letters by 13 gives readable text ({})",
+                readability(before, after)
+            ))
+        })
+    }
+
     fn run(_: &NoConfig, input: &str) -> Result<String, OpError> {
         Ok(shift_text(input, 13))
     }
@@ -95,6 +153,21 @@ impl Op for Atbash {
     type Config = NoConfig;
     type In<'a> = &'a str;
     type Out = String;
+
+    fn detect(input: &str) -> Option<Suggestion<NoConfig>> {
+        if !enough_letters(input) {
+            return None;
+        }
+        let sample = sample(input);
+        let before = text_score(sample);
+        let after = text_score(&Self::run(&NoConfig {}, sample).ok()?);
+        (after >= MIN_SCORE && after >= before + MIN_GAIN).then(|| {
+            Suggestion::new(format!(
+                "Mirroring the alphabet gives readable text ({})",
+                readability(before, after)
+            ))
+        })
+    }
 
     fn run(_: &NoConfig, input: &str) -> Result<String, OpError> {
         let mut bytes = input.as_bytes().to_vec();
@@ -203,6 +276,34 @@ mod tests {
     fn known_part_narrows_the_list() {
         let output = CaesarCipher::run(&config(0, "hello"), "Uryyb").unwrap();
         assert_eq!(output, "Shift 13: Hello");
+    }
+
+    const PROSE: &str = "The secret message is hidden in the last file that you will find here.";
+
+    #[test]
+    fn detection_finds_the_shift_that_restores_prose() {
+        let shifted = CaesarCipher::run(&config(7, ""), PROSE).unwrap();
+        let suggestion = CaesarCipher::detect(&shifted).expect("a shift is suggested");
+        assert_eq!(suggestion.config.shift, 19);
+        assert_eq!(CaesarCipher::run(&suggestion.config, &shifted).unwrap(), PROSE);
+        assert!(Rot13::detect(&shifted).is_none());
+    }
+
+    #[test]
+    fn rot13_and_atbash_offer_themselves_and_caesar_steps_aside() {
+        let rotated = Rot13::run(&NoConfig {}, PROSE).unwrap();
+        assert!(Rot13::detect(&rotated).is_some());
+        assert!(CaesarCipher::detect(&rotated).is_none());
+        let mirrored = Atbash::run(&NoConfig {}, PROSE).unwrap();
+        assert!(Atbash::detect(&mirrored).is_some());
+    }
+
+    #[test]
+    fn readable_text_and_short_text_are_left_alone() {
+        assert!(CaesarCipher::detect(PROSE).is_none());
+        assert!(Rot13::detect(PROSE).is_none());
+        assert!(Atbash::detect(PROSE).is_none());
+        assert!(CaesarCipher::detect("uryyb").is_none(), "too few letters to judge");
     }
 
     #[test]

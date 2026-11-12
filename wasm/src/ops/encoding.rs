@@ -5,7 +5,7 @@ use hex_simd::AsciiCase;
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Tag};
+use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
 
 /// Encoded data is routinely wrapped or padded with whitespace; it carries no meaning.
 /// Borrows the input unless there is whitespace to strip.
@@ -85,6 +85,14 @@ impl Op for Base16Decode {
     type In<'a> = &'a str;
     type Out = Vec<u8>;
 
+    fn detect(input: &str) -> Option<Suggestion<NoConfig>> {
+        let compact = compact(input);
+        (compact.len() >= 4
+            && compact.len() % 2 == 0
+            && compact.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then(|| Suggestion::new("Only hexadecimal digits, an even number of them"))
+    }
+
     fn run(_: &NoConfig, input: &str) -> Result<Vec<u8>, OpError> {
         hex_simd::decode_to_vec(compact(input).as_bytes())
             .map_err(|_| OpError::invalid_input("Not valid hexadecimal"))
@@ -121,6 +129,16 @@ impl Op for Base32Decode {
     type Config = NoConfig;
     type In<'a> = &'a str;
     type Out = Vec<u8>;
+
+    fn detect(input: &str) -> Option<Suggestion<NoConfig>> {
+        let compact = compact(input);
+        let data = compact.trim_end_matches('=');
+        (compact.len() >= 8
+            && compact.len() % 8 == 0
+            && compact.len() - data.len() <= 6
+            && data.bytes().all(|byte| matches!(byte, b'A'..=b'Z' | b'2'..=b'7')))
+        .then(|| Suggestion::new("Only A-Z and 2-7, in groups of eight: the Base32 alphabet"))
+    }
 
     fn run(_: &NoConfig, input: &str) -> Result<Vec<u8>, OpError> {
         decode_chunked(&BASE32, 8, compact(input).as_bytes())
@@ -199,6 +217,17 @@ mod tests {
         let b32 = Base32Encode::run(&NoConfig {}, &bytes).unwrap();
         assert_eq!(b32, BASE32.encode(&bytes));
         assert_eq!(Base32Decode::run(&NoConfig {}, &b32).unwrap(), bytes);
+    }
+
+    #[test]
+    fn detection_follows_each_alphabet() {
+        assert!(Base16Decode::detect("68656c6c6f").is_some());
+        assert!(Base16Decode::detect("68 65 6C 6c").is_some());
+        assert!(Base16Decode::detect("68656c6c6").is_none(), "odd length");
+        assert!(Base16Decode::detect("hello!").is_none());
+        assert!(Base32Decode::detect("NBSWY3DPEB3W64TMMQ======").is_some());
+        assert!(Base32Decode::detect("nbswy3dpeb3w64tm").is_none(), "lowercase is not Base32");
+        assert!(Base32Decode::detect("NBSWY3DP1").is_none());
     }
 
     #[test]

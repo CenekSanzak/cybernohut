@@ -36,6 +36,12 @@ function handle(request: EngineRequest): EngineResponse {
         id: request.id,
         bytes: wasm.output_bytes(request.nodeId, request.port),
       };
+    case "suggest":
+      return {
+        type: "suggested",
+        id: request.id,
+        proposals: wasm.suggest(request.nodeId, request.port),
+      };
   }
 }
 

@@ -61,7 +61,12 @@ function readConfig(defaults: ConfigRecord, saved: unknown): ConfigRecord {
   return config;
 }
 
-function readOpData(opId: unknown, config: unknown, perLine: unknown): NodeData | null {
+function readOpData(
+  opId: unknown,
+  config: unknown,
+  perLine: unknown,
+  note?: unknown
+): NodeData | null {
   if (!isOpId(opId)) return null;
   const meta = getMeta(opId);
   return {
@@ -69,6 +74,7 @@ function readOpData(opId: unknown, config: unknown, perLine: unknown): NodeData 
     opId,
     config: readConfig(meta.default_config as ConfigRecord, config),
     perLine: perLine === true && meta.supports_per_line,
+    ...(typeof note === "string" && note && { note }),
   } as NodeData;
 }
 
@@ -77,7 +83,7 @@ function readData(data: unknown): NodeData | null {
   if (data.kind === "input") return { kind: "input", text: asString(data.text) };
   // File content is never saved, so a loaded file node starts out empty.
   if (data.kind === "file") return { kind: "file", name: "", size: 0 };
-  if (data.kind === "op") return readOpData(data.opId, data.config, data.perLine);
+  if (data.kind === "op") return readOpData(data.opId, data.config, data.perLine, data.note);
   // Version 1 stored the whole operation object, functions and all, on the node.
   if (data.id === "input") return { kind: "input", text: asString(data.value) };
   return readOpData(data.id, data.configValues, false);

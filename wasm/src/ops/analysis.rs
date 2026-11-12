@@ -38,6 +38,14 @@ const SIGNATURES: &[(usize, &[u8], &str)] = &[
     (0, b"\xfe\xff", "Text (UTF-16, big endian)"),
 ];
 
+/// What the signature bytes of `input` identify, if anything.
+pub fn signature(input: &[u8]) -> Option<&'static str> {
+    SIGNATURES
+        .iter()
+        .find(|(offset, magic, _)| input.get(*offset..).is_some_and(|rest| rest.starts_with(magic)))
+        .map(|(_, _, description)| *description)
+}
+
 pub struct DetectFileType;
 
 impl Op for DetectFileType {
@@ -53,10 +61,7 @@ impl Op for DetectFileType {
     type Out = String;
 
     fn run(_: &NoConfig, input: &[u8]) -> Result<String, OpError> {
-        let by_signature = SIGNATURES
-            .iter()
-            .find(|(offset, magic, _)| input.get(*offset..).is_some_and(|rest| rest.starts_with(magic)))
-            .map(|(_, _, description)| *description);
+        let by_signature = signature(input);
         Ok(match by_signature {
             Some(description) => description,
             None if input.is_empty() => "Empty",

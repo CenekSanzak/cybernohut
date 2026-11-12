@@ -60,6 +60,11 @@ impl Op for Utf8Decode {
 
 macro_rules! text_op {
     ($name:ident, $id:literal, $label:literal, $description:literal, $run:expr) => {
+        text_op!($name, $id, $label, $description, $run, Err);
+    };
+    // With a last argument: how to rewrite text the engine hands over, where it lies.
+    // It returns the text untouched when that is not possible.
+    ($name:ident, $id:literal, $label:literal, $description:literal, $run:expr, $in_place:expr) => {
         pub struct $name;
 
         impl Op for $name {
@@ -76,6 +81,17 @@ macro_rules! text_op {
                 let run: fn(&str) -> String = $run;
                 Ok(run(input))
             }
+
+            fn take_over(_: &NoConfig, input: Value) -> Result<Result<Value, OpError>, Value> {
+                let in_place: fn(String) -> Result<String, String> = $in_place;
+                match input {
+                    Value::Text(text) => match in_place(text) {
+                        Ok(text) => Ok(Ok(Value::Text(text))),
+                        Err(text) => Err(Value::Text(text)),
+                    },
+                    other => Err(other),
+                }
+            }
         }
     };
 }
@@ -84,10 +100,36 @@ text_op!(Reverse, "reverse", "Reverse", "Reverses the order of the characters", 
     .chars()
     .rev()
     .collect());
-text_op!(Uppercase, "to-uppercase", "To Uppercase", "Converts the text to uppercase", |s| s
-    .to_uppercase());
-text_op!(Lowercase, "to-lowercase", "To Lowercase", "Converts the text to lowercase", |s| s
-    .to_lowercase());
+// Changing the case of ASCII keeps every character the same size, so it can be done
+// where the text lies. Other scripts can grow or shrink ("ß" becomes "SS").
+text_op!(
+    Uppercase,
+    "to-uppercase",
+    "To Uppercase",
+    "Converts the text to uppercase",
+    |s| s.to_uppercase(),
+    |mut text| {
+        if !text.is_ascii() {
+            return Err(text);
+        }
+        text.make_ascii_uppercase();
+        Ok(text)
+    }
+);
+text_op!(
+    Lowercase,
+    "to-lowercase",
+    "To Lowercase",
+    "Converts the text to lowercase",
+    |s| s.to_lowercase(),
+    |mut text| {
+        if !text.is_ascii() {
+            return Err(text);
+        }
+        text.make_ascii_lowercase();
+        Ok(text)
+    }
+);
 text_op!(
     RemoveSpaces,
     "remove-spaces",
@@ -434,6 +476,27 @@ mod tests {
         assert_eq!(run(TitleCase::run, "the quick BROWN fox's den"), "The Quick Brown Fox's Den");
         assert_eq!(run(SnakeCase::run, "first name\nlastName"), "first_name\nlast_name");
         assert_eq!(run(CamelCase::run, "ığdır şehri"), "ığdırŞehri");
+    }
+
+    #[test]
+    fn case_conversion_in_place_matches_the_ordinary_result() {
+        for text in ["Nohut 123", "straße İstanbul"] {
+            let ordinary = Uppercase::run(&NoConfig {}, text).unwrap();
+            let in_place = match Uppercase::take_over(&NoConfig {}, Value::Text(text.into())) {
+                Ok(result) => result.unwrap(),
+                // Handed back: the engine then runs it the ordinary way.
+                Err(value) => Value::Text(Uppercase::run(&NoConfig {}, match &value {
+                    Value::Text(text) => text,
+                    _ => unreachable!(),
+                }).unwrap()),
+            };
+            assert_eq!(in_place, Value::Text(ordinary));
+        }
+        assert!(Uppercase::take_over(&NoConfig {}, Value::Text("straße".into())).is_err());
+        assert_eq!(
+            Lowercase::take_over(&NoConfig {}, Value::Text("ABC".into())).unwrap().unwrap(),
+            Value::Text("abc".into())
+        );
     }
 
     #[test]

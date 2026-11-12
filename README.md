@@ -19,11 +19,12 @@ A visual toolkit for transforming data: encodings, hashes, ciphers and compressi
   the one in flight, and an out-of-memory crash restarts the engine instead of the page.
 - **Auto mode that shows its work.** "Suggest steps" searches for the chain of
   operations that turns a value into something readable: layered Base64, hex, URL and
-  number encodings, gzip and zlib, JSON Web Tokens, Caesar and ROT13 shifts, and XOR and
-  Vigenère with the key recovered. The answer is added to the graph as ordinary nodes,
-  each labelled with why it was chosen, so it can be read, changed and reused on other
-  input. Readable means prose in any language written with spaces; recovering a cipher
-  key relies on English letter frequencies.
+  number encodings, HTML entities, escapes, hex dumps and Morse code, gzip and zlib,
+  JSON Web Tokens, Caesar, ROT13 and ROT47, and XOR and Vigenère with the key recovered.
+  The answer is added to the graph as ordinary nodes, each labelled with why it was
+  chosen, so it can be read, changed and reused on other input. Readable means prose in
+  any language written with spaces; Vigenère keys are recovered for English, Turkish,
+  German, French and Spanish text.
 - **Large inputs.** Up to 512 MB of results are kept so any step's output shows at
   once. Past that, results no later step needs are released, steps that can work in
   place reuse their input's memory, and looking at a released step runs the graph again.
@@ -35,27 +36,30 @@ A visual toolkit for transforming data: encodings, hashes, ciphers and compressi
 
 ### Operations
 
-75 operations:
+94 operations:
 
-- **Encoding:** Base64 (standard, URL-safe and with a custom alphabet), Base32, Base85,
-  hexadecimal, URL percent-encoding; bytes as binary, octal or decimal numbers, or as one
-  big integer in either byte order
+- **Encoding:** Base64 (standard, URL-safe and with a custom alphabet), Base58, Base32,
+  Base85, hexadecimal, URL percent-encoding, HTML entities, `\u` and `\x` escapes, Morse
+  code; bytes as binary, octal or decimal numbers, as one big integer in either byte
+  order, or as a hex dump
 - **Compression:** gzip, zlib and raw DEFLATE, both ways
 - **Encryption:** AES in CBC, CTR, GCM and ECB with 128, 192 or 256-bit keys; textbook
-  RSA, including factoring a modulus with close primes or a small factor; XOR with a
-  repeating key
-- **Hashing:** MD5, SHA-1, SHA-256, SHA-512 (as hex or Base64), HMAC, CRC32
-- **Classic ciphers:** Caesar, ROT13, Atbash, Vigenère
-- **Steganography:** LSB extraction from PNG pixels, data hidden after the end of a PNG
-  or JPEG, text and comments in image metadata
+  RSA, including reading PEM keys and factoring a modulus with close primes or a small
+  factor; XOR with a repeating key
+- **Hashing:** MD5, SHA-1, SHA-256, SHA-512, SHA3-256, SHA3-512, Keccak-256 (as hex or
+  Base64), HMAC, CRC32
+- **Classic ciphers:** Caesar, ROT13, ROT47, Atbash, Vigenère
+- **Steganography:** LSB extraction from and embedding into PNG and BMP pixels, data
+  hidden after the end of a PNG or JPEG, text and comments in image metadata
 - **Data formats:** JSON format and minify, JWT decode, Unix timestamps to and from
   ISO 8601
 - **Text:** regex extract and replace, ready-made patterns (flags, URLs, emails, IP
   addresses, hashes), reverse, upper, lower, title, camel, snake and kebab case, slice,
-  split, join, concatenate, word count, statistics, UTF-8 decoding
-- **Analysis:** file type, media type and image size from signature bytes, Shannon
-  entropy, character frequency with the index of coincidence, language detection,
-  comparing two values
+  split, join, concatenate, sort and deduplicate lines, word count, statistics, UTF-8
+  decoding
+- **Analysis:** file type, media type and image size from signature bytes, printable
+  strings in binary data, Shannon entropy, character frequency with the index of
+  coincidence, language detection, comparing two values
 
 Any single-input operation that produces text can also be run line by line.
 

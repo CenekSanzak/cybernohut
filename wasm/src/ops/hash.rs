@@ -1,6 +1,7 @@
 use md5::Md5;
 use sha1::Sha1;
 use sha2::{Digest, Sha256 as Sha256Hasher, Sha512 as Sha512Hasher};
+use sha3::{Keccak256 as Keccak256Hasher, Sha3_256 as Sha3_256Hasher, Sha3_512 as Sha3_512Hasher};
 
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -62,6 +63,9 @@ hash_op!(Md5Hash, Md5, "md5", "MD5", "https://en.wikipedia.org/wiki/MD5");
 hash_op!(Sha1Hash, Sha1, "sha1", "SHA1", "https://en.wikipedia.org/wiki/SHA-1");
 hash_op!(Sha256, Sha256Hasher, "sha256", "SHA256", "https://en.wikipedia.org/wiki/SHA-2");
 hash_op!(Sha512, Sha512Hasher, "sha512", "SHA512", "https://en.wikipedia.org/wiki/SHA-2");
+hash_op!(Sha3_256, Sha3_256Hasher, "sha3-256", "SHA3-256", "https://en.wikipedia.org/wiki/SHA-3");
+hash_op!(Sha3_512, Sha3_512Hasher, "sha3-512", "SHA3-512", "https://en.wikipedia.org/wiki/SHA-3");
+hash_op!(Keccak256, Keccak256Hasher, "keccak-256", "Keccak-256", "https://en.wikipedia.org/wiki/SHA-3");
 
 #[cfg(test)]
 mod tests {
@@ -85,6 +89,21 @@ mod tests {
         // `printf abc | openssl dgst -sha256 -binary | base64`
         let base64 = HashConfig { output: DigestFormat::Base64 };
         assert_eq!(Sha256::run(&base64, b"abc").unwrap(), "ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0=");
+    }
+
+    #[test]
+    fn sha3_and_keccak_known_vectors() {
+        let config = HashConfig::default();
+        assert_eq!(
+            Sha3_256::run(&config, b"abc").unwrap(),
+            "3a985da74fe225b2045c172d6bd390bd855f086e3e9d525b46bfe24511431532"
+        );
+        // The pre-standard padding Ethereum uses: the hash of nothing.
+        assert_eq!(
+            Keccak256::run(&config, b"").unwrap(),
+            "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+        );
+        assert!(Sha3_512::run(&config, b"abc").unwrap().starts_with("b751850b1a57168a5693cd924b6b096e"));
     }
 
     #[test]

@@ -85,13 +85,56 @@ fn natural_language_fit(sample: &str) -> f64 {
     word_shape * vowel_fit
 }
 
-/// How many letters of the text are in common English words. Unlike [`text_score`]
+/// A few of the most common words of each language. Short function words are what
+/// tells languages apart, and they are present in almost any sentence.
+pub const COMMON_WORDS_BY_LANGUAGE: &[(&str, &[&str])] = &[
+    ("English", &["the", "and", "of", "to", "in", "is", "that", "it", "for", "was", "with", "you", "are", "this", "not", "have", "be", "on"]),
+    ("Turkish", &["bir", "ve", "bu", "da", "de", "için", "ile", "ne", "çok", "ama", "gibi", "daha", "var", "ben", "en", "kadar", "olarak", "mi", "değil", "her"]),
+    ("German", &["der", "die", "und", "das", "ist", "nicht", "ein", "ich", "zu", "den", "mit", "sie", "auf", "für", "es", "eine", "dem", "von"]),
+    ("French", &["le", "la", "les", "et", "des", "est", "un", "une", "du", "que", "dans", "pour", "pas", "qui", "il", "sur", "ne", "ce", "au"]),
+    ("Spanish", &["el", "la", "de", "que", "y", "en", "los", "se", "del", "las", "por", "un", "para", "con", "no", "una", "su", "es", "lo"]),
+    ("Italian", &["il", "di", "che", "e", "la", "per", "un", "non", "sono", "con", "una", "le", "si", "del", "della", "è", "gli", "anche"]),
+    ("Portuguese", &["o", "de", "que", "e", "do", "da", "em", "um", "para", "não", "uma", "os", "com", "se", "na", "por", "mais", "as", "dos"]),
+    ("Dutch", &["de", "het", "een", "van", "en", "is", "dat", "op", "te", "zijn", "voor", "niet", "met", "ik", "je", "aan", "ook", "als"]),
+];
+
+/// How often each letter from A to Z occurs in a language, in percent. Letters with
+/// diacritics are left out, since the classic ciphers do not touch them.
+pub const LETTER_PERCENT_BY_LANGUAGE: &[(&str, [f64; 26])] = &[
+    ("English", ENGLISH_LETTER_PERCENT),
+    ("Turkish", [
+        11.92, 2.84, 0.96, 4.71, 8.91, 0.46, 1.25, 1.21, 8.60, 0.03, 4.68, 5.92, 3.75, 7.49,
+        2.48, 0.89, 0.01, 6.72, 3.01, 3.31, 3.24, 0.96, 0.01, 0.01, 3.34, 1.50,
+    ]),
+    ("German", [
+        6.5, 1.9, 3.1, 5.1, 16.4, 1.7, 3.0, 4.6, 6.6, 0.3, 1.4, 3.4, 2.5, 9.8, 2.6, 0.7, 0.02,
+        7.0, 7.3, 6.2, 4.2, 0.8, 1.9, 0.03, 0.04, 1.1,
+    ]),
+    ("French", [
+        7.6, 0.9, 3.3, 3.7, 14.7, 1.1, 0.9, 0.7, 7.5, 0.6, 0.07, 5.5, 3.0, 7.1, 5.8, 2.5, 1.4,
+        6.7, 7.9, 7.2, 6.3, 1.8, 0.05, 0.4, 0.1, 0.3,
+    ]),
+    ("Spanish", [
+        11.5, 2.2, 4.0, 5.0, 12.2, 0.7, 1.8, 0.7, 6.2, 0.5, 0.01, 5.0, 3.2, 6.7, 8.7, 2.5, 0.9,
+        6.9, 8.0, 4.6, 2.9, 1.1, 0.02, 0.2, 1.0, 0.5,
+    ]),
+];
+
+/// How many letters of the text are in common words of English or of the other
+/// languages above. Unlike [`text_score`]
 /// this keeps growing as more of a text becomes readable, which is what a search for
 /// a key needs to tell a nearly right key from the right one.
 pub fn common_word_letters(text: &str) -> usize {
-    text.split(|c: char| !c.is_ascii_alphabetic())
-        .filter(|word| COMMON_WORDS.contains(&word.to_ascii_lowercase().as_str()))
-        .map(str::len)
+    text.split(|c: char| !c.is_alphabetic())
+        .filter(|word| !word.is_empty())
+        .filter(|word| {
+            let word = word.to_lowercase();
+            COMMON_WORDS.contains(&word.as_str())
+                // One-letter words of other languages match too easily by accident.
+                || (word.chars().count() >= 2
+                    && COMMON_WORDS_BY_LANGUAGE.iter().any(|(_, words)| words.contains(&word.as_str())))
+        })
+        .map(|word| word.chars().count())
         .sum()
 }
 

@@ -24,6 +24,35 @@ fn read_all(decoder: impl Read, format: &str) -> Result<Vec<u8>, OpError> {
     Ok(output)
 }
 
+/// What a compressed stream that was cut short decompresses to, as far as it goes.
+/// Auto mode works on the start of large inputs, and uses this to see what a stream
+/// holds without having all of it. `None` when the operation is not a decompression
+/// or nothing came out.
+pub fn inflate_prefix(op_id: &str, input: &[u8]) -> Option<Vec<u8>> {
+    let mut decoder: Box<dyn Read + '_> = match op_id {
+        "gunzip" => Box::new(MultiGzDecoder::new(input)),
+        "zlib-inflate" => Box::new(ZlibDecoder::new(input)),
+        "raw-inflate" => Box::new(DeflateDecoder::new(input)),
+        _ => return None,
+    };
+    let mut output = Vec::new();
+    let mut buffer = [0u8; 8192];
+    // Read until the stream breaks off, keeping what came before.
+    while let Ok(read @ 1..) = decoder.read(&mut buffer) {
+        output.extend_from_slice(&buffer[..read]);
+        if output.len() as u64 > MAX_INFLATED_BYTES {
+            break;
+        }
+    }
+    // The cut may fall inside a multi-byte character; text should still read as text.
+    if let Err(error) = std::str::from_utf8(&output) {
+        if error.error_len().is_none() {
+            output.truncate(error.valid_up_to());
+        }
+    }
+    (!output.is_empty()).then_some(output)
+}
+
 fn looks_like_gzip(input: &[u8]) -> bool {
     input.starts_with(&[0x1f, 0x8b, 0x08])
 }

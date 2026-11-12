@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
 use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Tag};
+use crate::score::COMMON_WORDS_BY_LANGUAGE as LANGUAGES;
 
 const BAR_WIDTH: f64 = 30.0;
 
@@ -100,19 +101,6 @@ impl Op for CharacterFrequency {
         Ok(output)
     }
 }
-
-/// A few of the most common words of each language. Short function words are what
-/// tells languages apart, and they are present in almost any sentence.
-const LANGUAGES: &[(&str, &[&str])] = &[
-    ("English", &["the", "and", "of", "to", "in", "is", "that", "it", "for", "was", "with", "you", "are", "this", "not", "have", "be", "on"]),
-    ("Turkish", &["bir", "ve", "bu", "da", "de", "için", "ile", "ne", "çok", "ama", "gibi", "daha", "var", "ben", "en", "kadar", "olarak", "mi", "değil", "her"]),
-    ("German", &["der", "die", "und", "das", "ist", "nicht", "ein", "ich", "zu", "den", "mit", "sie", "auf", "für", "es", "eine", "dem", "von"]),
-    ("French", &["le", "la", "les", "et", "des", "est", "un", "une", "du", "que", "dans", "pour", "pas", "qui", "il", "sur", "ne", "ce", "au"]),
-    ("Spanish", &["el", "la", "de", "que", "y", "en", "los", "se", "del", "las", "por", "un", "para", "con", "no", "una", "su", "es", "lo"]),
-    ("Italian", &["il", "di", "che", "e", "la", "per", "un", "non", "sono", "con", "una", "le", "si", "del", "della", "è", "gli", "anche"]),
-    ("Portuguese", &["o", "de", "que", "e", "do", "da", "em", "um", "para", "não", "uma", "os", "com", "se", "na", "por", "mais", "as", "dos"]),
-    ("Dutch", &["de", "het", "een", "van", "en", "is", "dat", "op", "te", "zijn", "voor", "niet", "met", "ik", "je", "aan", "ook", "als"]),
-];
 
 /// The share of words that have to be common words before a language is named.
 const MIN_SHARE: f64 = 0.12;

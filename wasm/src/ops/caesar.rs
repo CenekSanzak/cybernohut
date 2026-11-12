@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
 use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag, Value};
-use crate::score::{common_word_letters, text_score, ENGLISH_LETTER_PERCENT};
+use crate::score::{common_word_letters, text_score, LETTER_PERCENT_BY_LANGUAGE};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(default, rename_all = "camelCase")]
@@ -203,16 +203,28 @@ impl Op for Atbash {
     }
 
     fn run(_: &NoConfig, input: &str) -> Result<String, OpError> {
-        let mut bytes = input.as_bytes().to_vec();
-        for byte in &mut bytes {
-            *byte = match *byte {
-                b'a'..=b'z' => b'z' - (*byte - b'a'),
-                b'A'..=b'Z' => b'Z' - (*byte - b'A'),
-                other => other,
-            };
-        }
-        Ok(String::from_utf8(bytes).expect("mirroring ASCII letters keeps the text valid UTF-8"))
+        Ok(mirror_owned(input.to_owned()))
     }
+
+    fn take_over(_: &NoConfig, input: Value) -> Result<Result<Value, OpError>, Value> {
+        match input {
+            Value::Text(text) => Ok(Ok(Value::Text(mirror_owned(text)))),
+            other => Err(other),
+        }
+    }
+}
+
+/// Atbash on text the caller gives up, reusing its memory.
+fn mirror_owned(text: String) -> String {
+    let mut bytes = text.into_bytes();
+    for byte in &mut bytes {
+        *byte = match *byte {
+            b'a'..=b'z' => b'z' - (*byte - b'a'),
+            b'A'..=b'Z' => b'Z' - (*byte - b'A'),
+            other => other,
+        };
+    }
+    String::from_utf8(bytes).expect("mirroring ASCII letters keeps the text valid UTF-8")
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
@@ -228,8 +240,9 @@ const MAX_KEY_LETTERS: usize = 16;
 const MIN_LETTERS_PER_KEY_LETTER: usize = 8;
 
 /// The shift that was most likely applied to these letters (0 = a), judged by how
-/// close undoing it brings their frequencies to English: the smallest chi-squared.
-fn likely_shift(letters: impl Iterator<Item = u8>) -> u8 {
+/// close undoing it brings their frequencies to the language's: the smallest
+/// chi-squared.
+fn likely_shift(letters: impl Iterator<Item = u8>, percent: &[f64; 26]) -> u8 {
     let mut counts = [0.0f64; 26];
     let mut total = 0.0;
     for letter in letters {
@@ -239,7 +252,7 @@ fn likely_shift(letters: impl Iterator<Item = u8>) -> u8 {
     let distance = |shift: usize| -> f64 {
         (0..26)
             .map(|plain| {
-                let expected = total * ENGLISH_LETTER_PERCENT[plain] / 100.0;
+                let expected = total * percent[plain] / 100.0;
                 (counts[(plain + shift) % 26] - expected).powi(2) / expected
             })
             .sum()
@@ -287,14 +300,20 @@ fn recover_key(text: &str) -> Option<(String, f64, f64)> {
         }
     };
 
+    // The plaintext's language is not known, so each language's letter frequencies
+    // get a try; the right one produces the key that reads best.
     let mut best: Option<(Vec<u8>, (usize, f64))> = None;
-    for length in 2..=MAX_KEY_LETTERS.min(letters.len() / MIN_LETTERS_PER_KEY_LETTER) {
-        let shifts: Vec<u8> = (0..length)
-            .map(|offset| likely_shift(letters.iter().skip(offset).step_by(length).copied()))
-            .collect();
-        let fit = fitness(&shifts);
-        if best.as_ref().is_none_or(|(_, best)| fit > *best) {
-            best = Some((shifts, fit));
+    for (_, percent) in LETTER_PERCENT_BY_LANGUAGE {
+        for length in 2..=MAX_KEY_LETTERS.min(letters.len() / MIN_LETTERS_PER_KEY_LETTER) {
+            let shifts: Vec<u8> = (0..length)
+                .map(|offset| {
+                    likely_shift(letters.iter().skip(offset).step_by(length).copied(), percent)
+                })
+                .collect();
+            let fit = fitness(&shifts);
+            if best.as_ref().is_none_or(|(_, best)| fit > *best) {
+                best = Some((shifts, fit));
+            }
         }
     }
     let (mut shifts, mut fit) = best?;
@@ -343,7 +362,7 @@ impl Op for Vigenere {
         ]
     }
 
-    /// Recovers the key from letter frequencies, which are assumed to be English.
+    /// Recovers the key from letter frequencies, trying those of five languages.
     fn detect(input: &str) -> Option<Suggestion<VigenereConfig>> {
         let (key, before, after) = recover_key(input)?;
         Some(Suggestion {
@@ -357,31 +376,49 @@ impl Op for Vigenere {
     }
 
     fn run(config: &VigenereConfig, input: &str) -> Result<String, OpError> {
-        let shifts: Vec<u8> = config
-            .key
-            .bytes()
-            .filter(u8::is_ascii_alphabetic)
-            .map(|letter| letter.to_ascii_lowercase() - b'a')
-            .collect();
-        if shifts.is_empty() {
-            return Err(OpError::invalid_config("Enter a key with at least one letter"));
-        }
-        let mut bytes = input.as_bytes().to_vec();
-        // The key advances only on letters, so punctuation does not shift the alignment.
-        let mut position = 0;
-        for byte in &mut bytes {
-            let base = match *byte {
-                b'a'..=b'z' => b'a',
-                b'A'..=b'Z' => b'A',
-                _ => continue,
-            };
-            let shift = shifts[position % shifts.len()];
-            let shift = if config.decrypt { 26 - shift } else { shift };
-            *byte = (*byte - base + shift) % 26 + base;
-            position += 1;
-        }
-        Ok(String::from_utf8(bytes).expect("shifting ASCII letters keeps the text valid UTF-8"))
+        Ok(vigenere_owned(&key_shifts(config)?, config.decrypt, input.to_owned()))
     }
+
+    fn take_over(config: &VigenereConfig, input: Value) -> Result<Result<Value, OpError>, Value> {
+        match (key_shifts(config), input) {
+            (Ok(shifts), Value::Text(text)) => {
+                Ok(Ok(Value::Text(vigenere_owned(&shifts, config.decrypt, text))))
+            }
+            (_, other) => Err(other),
+        }
+    }
+}
+
+fn key_shifts(config: &VigenereConfig) -> Result<Vec<u8>, OpError> {
+    let shifts: Vec<u8> = config
+        .key
+        .bytes()
+        .filter(u8::is_ascii_alphabetic)
+        .map(|letter| letter.to_ascii_lowercase() - b'a')
+        .collect();
+    if shifts.is_empty() {
+        return Err(OpError::invalid_config("Enter a key with at least one letter"));
+    }
+    Ok(shifts)
+}
+
+/// The cipher on text the caller gives up, reusing its memory.
+fn vigenere_owned(shifts: &[u8], decrypt: bool, text: String) -> String {
+    let mut bytes = text.into_bytes();
+    // The key advances only on letters, so punctuation does not shift the alignment.
+    let mut position = 0;
+    for byte in &mut bytes {
+        let base = match *byte {
+            b'a'..=b'z' => b'a',
+            b'A'..=b'Z' => b'A',
+            _ => continue,
+        };
+        let shift = shifts[position % shifts.len()];
+        let shift = if decrypt { 26 - shift } else { shift };
+        *byte = (*byte - base + shift) % 26 + base;
+        position += 1;
+    }
+    String::from_utf8(bytes).expect("shifting ASCII letters keeps the text valid UTF-8")
 }
 
 #[cfg(test)]
@@ -497,6 +534,22 @@ mod tests {
             let suggestion = Vigenere::detect(&encrypted).unwrap_or_else(|| panic!("no key for {key}"));
             assert_eq!(suggestion.config, VigenereConfig { key: key.into(), decrypt: true });
             assert_eq!(Vigenere::run(&suggestion.config, &encrypted).unwrap(), LONG);
+        }
+    }
+
+    #[test]
+    fn vigenere_detection_works_on_other_languages() {
+        let turkish = "Gizli mesaj burada bulacak oldugun son dosyanin icinde sakli duruyor ve \
+            bu anahtar ile daha da guvenli bir hale geliyor. Kimse yillardir bu dosyaya bakmadi \
+            ama sen bir gun gelip onu acacaksin ve her seyi ogreneceksin.";
+        let german = "Die geheime Nachricht ist in der letzten Datei versteckt und nicht auf dem \
+            Tisch. Niemand hat sie seit Jahren aufgemacht und der Schluessel steht auf der \
+            Rueckseite einer alten Karte die du in dem Haus finden wirst.";
+        for (text, key) in [(turkish, "NOHUT"), (german, "KARTE")] {
+            let encrypt = VigenereConfig { key: key.into(), decrypt: false };
+            let encrypted = Vigenere::run(&encrypt, text).unwrap();
+            let suggestion = Vigenere::detect(&encrypted).unwrap_or_else(|| panic!("no key for {key}"));
+            assert_eq!(suggestion.config.key, key);
         }
     }
 

@@ -51,12 +51,25 @@ fn byte_fit(byte: u8) -> f64 {
     }
 }
 
+/// The same without assuming a language: text is mostly letters and spaces, and
+/// letters outside ASCII are bytes above 0x7f.
+fn byte_fit_any_language(byte: u8) -> f64 {
+    match byte {
+        b'a'..=b'z' => 6.0,
+        b'A'..=b'Z' => 3.0,
+        b' ' => 15.0,
+        0x80..=0xff => 3.0,
+        b'\n' | b'\r' | b'\t' | b'!'..=b'~' => 1.0,
+        _ => -30.0,
+    }
+}
+
 /// The key byte that makes every `length`-th byte from `offset` look most like text.
-fn column_key(sample: &[u8], offset: usize, length: usize) -> u8 {
-    let fit = |key: u8| -> f64 {
-        sample.iter().skip(offset).step_by(length).map(|byte| byte_fit(byte ^ key)).sum()
+fn column_key(sample: &[u8], offset: usize, length: usize, fit: fn(u8) -> f64) -> u8 {
+    let total = |key: u8| -> f64 {
+        sample.iter().skip(offset).step_by(length).map(|byte| fit(byte ^ key)).sum()
     };
-    (0..=255u8).max_by(|a, b| fit(*a).total_cmp(&fit(*b))).expect("the range is not empty")
+    (0..=255u8).max_by(|a, b| total(*a).total_cmp(&total(*b))).expect("the range is not empty")
 }
 
 /// Key lengths worth trying. Text XORed with a repeating key repeats itself at
@@ -91,11 +104,16 @@ fn shortest_period(key: &[u8]) -> &[u8] {
 fn recover_key(sample: &[u8]) -> Option<(Vec<u8>, f64)> {
     let mut best: Option<(Vec<u8>, f64)> = None;
     for length in candidate_lengths(sample) {
-        let key: Vec<u8> = (0..length).map(|offset| column_key(sample, offset, length)).collect();
-        let key = shortest_period(&key);
-        let Some(score) = readability(&apply(sample, key)) else { continue };
-        if best.as_ref().is_none_or(|(_, best)| score > *best) {
-            best = Some((key.to_vec(), score));
+        // English statistics find an English key with less text; the neutral ones
+        // are there for everything else.
+        for fit in [byte_fit, byte_fit_any_language] {
+            let key: Vec<u8> =
+                (0..length).map(|offset| column_key(sample, offset, length, fit)).collect();
+            let key = shortest_period(&key);
+            let Some(score) = readability(&apply(sample, key)) else { continue };
+            if best.as_ref().is_none_or(|(_, best)| score > *best) {
+                best = Some((key.to_vec(), score));
+            }
         }
     }
     best
@@ -137,7 +155,7 @@ impl Op for Xor {
     }
 
     /// Looks for the key, single-byte or repeating, that turns the start of the input
-    /// into clearly readable text. The letter statistics used are English ones.
+    /// into clearly readable text.
     fn detect(input: &[u8]) -> Option<Suggestion<XorConfig>> {
         let sample = &input[..input.len().min(SAMPLE_BYTES)];
         if sample.len() < 8 {
@@ -232,6 +250,15 @@ mod tests {
             assert_eq!(suggestion.config, config(key, KeyFormat::Text));
             assert!(suggestion.reason.contains(key));
         }
+    }
+
+    #[test]
+    fn detection_recovers_a_key_over_text_in_another_language() {
+        let turkish = "Gizli mesaj, burada bulacağın son dosyanın içinde saklı duruyor. Kimse \
+            yıllardır o dosyaya bakmadı ama anahtar eski bir haritanın arkasında yazılı.";
+        let encrypted = Xor::run(&config("nohut", KeyFormat::Text), turkish.as_bytes()).unwrap();
+        let suggestion = Xor::detect(&encrypted).expect("a key is suggested");
+        assert_eq!(suggestion.config, config("nohut", KeyFormat::Text));
     }
 
     #[test]

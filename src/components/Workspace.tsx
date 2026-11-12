@@ -82,12 +82,17 @@ const Workspace: React.FC = () => {
     return () => clearTimeout(timer);
   }, [state]);
 
-  // The engine keeps a file's bytes until its node is gone.
+  // The engine keeps a file's bytes while its node exists or can come back by undo
+  // or redo.
   useEffect(() => {
-    engine.retainSources(
-      state.nodes.filter((node) => node.data.kind === "file").map((node) => node.id)
-    );
-  }, [state.nodes]);
+    const ids = new Set<string>();
+    for (const snapshot of [...history.past, history.present, ...history.future]) {
+      for (const node of snapshot.nodes) {
+        if (node.data.kind === "file") ids.add(node.id);
+      }
+    }
+    engine.retainSources([...ids]);
+  }, [history]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {

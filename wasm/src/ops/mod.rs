@@ -3,6 +3,7 @@
 pub mod aes;
 pub mod analysis;
 pub mod base64;
+pub mod base58;
 pub mod base64_custom;
 pub mod caesar;
 pub mod compare;
@@ -13,6 +14,7 @@ pub mod hash;
 pub mod json;
 pub mod key;
 pub mod mac;
+pub mod misc;
 pub mod number_base;
 pub mod regex;
 pub mod rsa;
@@ -33,7 +35,7 @@ use analysis::{DetectFileType, Entropy};
 use compress::{Gunzip, Gzip, RawDeflate, RawInflate, ZlibDeflate, ZlibInflate};
 use json::{JsonFormat, JsonFormatConfig, JsonMinify, JwtDecode};
 use mac::{Crc32, HmacConfig, HmacOp};
-use stego::{ImageMetadata, LsbConfig, LsbExtract, TrailingData};
+use stego::{ImageMetadata, LsbConfig, LsbEmbed, LsbExtract, TrailingData};
 use time::{FromUnixTimestamp, TimestampConfig, ToUnixTimestamp};
 use caesar::{Atbash, CaesarCipher, CaesarConfig, Rot13, Vigenere, VigenereConfig};
 use base64_custom::{Base64CustomConfig, Base64CustomDecode, Base64CustomEncode};
@@ -41,9 +43,14 @@ use compare::Compare;
 use frequency::{CharacterFrequency, DetectLanguage, FrequencyConfig};
 use rsa::{
     BytesToInteger, IntegerConfig, IntegerToBytes, RsaAnalyze, RsaAnalyzeConfig, RsaDecrypt,
-    RsaDecryptConfig, RsaEncrypt, RsaEncryptConfig,
+    RsaDecryptConfig, RsaEncrypt, RsaEncryptConfig, RsaParseKey,
 };
-use hash::{HashConfig, Md5Hash, Sha1Hash, Sha256, Sha512};
+use base58::{Base58Decode, Base58Encode};
+use hash::{HashConfig, Keccak256, Md5Hash, Sha1Hash, Sha256, Sha3_256, Sha3_512, Sha512};
+use misc::{
+    EscapeText, FromHexdump, FromMorse, HtmlEntityDecode, HtmlEntityEncode, Rot47, SortLines,
+    SortLinesConfig, Strings, StringsConfig, ToHexdump, ToMorse, UnescapeText, UniqueLines,
+};
 use number_base::{FromBinary, FromDecimal, FromOctal, ToBinary, ToDecimal, ToOctal};
 use self::regex::{
     ExtractPattern, ExtractPatternConfig, RegexExtract, RegexExtractConfig, RegexReplace,
@@ -162,9 +169,28 @@ ops! {
     "rsa-encrypt" => RsaEncrypt: RsaEncryptConfig,
     "rsa-decrypt" => RsaDecrypt: RsaDecryptConfig,
     "rsa-analyze-modulus" => RsaAnalyze: RsaAnalyzeConfig,
+    "rsa-parse-key" => RsaParseKey: NoConfig,
     "extract-trailing-data" => TrailingData: NoConfig,
     "image-metadata" => ImageMetadata: NoConfig,
     "lsb-extract" => LsbExtract: LsbConfig,
+    "lsb-embed" => LsbEmbed: LsbConfig,
+    "strings" => Strings: StringsConfig,
+    "to-hexdump" => ToHexdump: NoConfig,
+    "from-hexdump" => FromHexdump: NoConfig,
+    "to-morse" => ToMorse: NoConfig,
+    "from-morse" => FromMorse: NoConfig,
+    "html-entity-decode" => HtmlEntityDecode: NoConfig,
+    "html-entity-encode" => HtmlEntityEncode: NoConfig,
+    "rot47" => Rot47: NoConfig,
+    "unescape-text" => UnescapeText: NoConfig,
+    "escape-text" => EscapeText: NoConfig,
+    "sort-lines" => SortLines: SortLinesConfig,
+    "unique-lines" => UniqueLines: NoConfig,
+    "base58-encode" => Base58Encode: NoConfig,
+    "base58-decode" => Base58Decode: NoConfig,
+    "sha3-256" => Sha3_256: HashConfig,
+    "sha3-512" => Sha3_512: HashConfig,
+    "keccak-256" => Keccak256: HashConfig,
 }
 
 pub fn find(id: &str) -> Option<&'static OpEntry> {

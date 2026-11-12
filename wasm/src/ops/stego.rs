@@ -226,65 +226,27 @@ struct Pixels {
     rgba: Vec<u8>,
     width: usize,
     height: usize,
+    /// False when the image holds more than eight bits per value and only the low
+    /// eight are here: enough to read hidden bits, not to write the image back.
+    exact: bool,
 }
 
-/// Decodes the pixels of an 8-bit, non-interlaced PNG. That covers what image editors
-/// and steganography tools write; other variants are reported, not guessed at.
-fn png_pixels(input: &[u8]) -> Result<Pixels, OpError> {
-    let (chunks, _) = png_chunks(input)?;
-    let unsupported = |what: &str| OpError::invalid_input(format!("{what} PNG images are not supported"));
-    let header = chunks
-        .first()
-        .filter(|chunk| chunk.kind == b"IHDR" && chunk.data.len() == 13)
-        .ok_or_else(|| OpError::invalid_input("The PNG has no header chunk"))?
-        .data;
-    let width = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as usize;
-    let height = u32::from_be_bytes([header[4], header[5], header[6], header[7]]) as usize;
-    let (depth, color_type, interlaced) = (header[8], header[9], header[12] != 0);
-    if depth != 8 {
-        return Err(unsupported(&format!("{depth}-bit")));
-    }
-    if interlaced {
-        return Err(unsupported("Interlaced"));
-    }
-    let channels = match color_type {
-        0 | 3 => 1,
-        4 => 2,
-        2 => 3,
-        6 => 4,
-        other => return Err(OpError::invalid_input(format!("Unknown PNG colour type {other}"))),
-    };
-    let row_bytes = width.checked_mul(channels).filter(|row| *row > 0);
-    let total = row_bytes
-        .and_then(|row| (row + 1).checked_mul(height))
-        .filter(|total| *total <= MAX_PIXEL_BYTES && height > 0)
-        .ok_or_else(|| OpError::invalid_input("The image is empty or too large to decode"))?;
-    let row_bytes = row_bytes.expect("checked with the total");
-
-    let compressed: Vec<u8> = chunks
-        .iter()
-        .filter(|chunk| chunk.kind == b"IDAT")
-        .flat_map(|chunk| chunk.data.iter().copied())
-        .collect();
-    let mut raw = Vec::with_capacity(total);
-    ZlibDecoder::new(compressed.as_slice())
-        .take(total as u64)
-        .read_to_end(&mut raw)
-        .map_err(|_| OpError::invalid_input("The PNG's pixel data does not decompress"))?;
-    if raw.len() != total {
-        return Err(OpError::invalid_input("The PNG holds fewer pixels than its header says"));
-    }
-
-    // Each row was stored as differences from its neighbours; add them back.
+/// Undoes PNG row filtering for `rows` rows of `row_bytes` bytes taken from the front
+/// of `raw`, where a pixel is `pixel_bytes` wide. Each row was stored as differences
+/// from its neighbours; this adds them back.
+fn unfilter(raw: &mut &[u8], row_bytes: usize, rows: usize, pixel_bytes: usize) -> Result<Vec<u8>, OpError> {
+    let short = || OpError::invalid_input("The PNG holds fewer pixels than its header says");
     let mut previous = vec![0u8; row_bytes];
-    let mut samples = Vec::with_capacity(row_bytes * height);
-    for row in raw.chunks_exact(row_bytes + 1) {
+    let mut samples = Vec::with_capacity(row_bytes * rows);
+    for _ in 0..rows {
+        let (row, rest) = raw.split_at_checked(row_bytes + 1).ok_or_else(short)?;
+        *raw = rest;
         let (filter, row) = (row[0], &row[1..]);
         let mut current = vec![0u8; row_bytes];
         for index in 0..row_bytes {
-            let left = if index >= channels { current[index - channels] } else { 0 };
+            let left = if index >= pixel_bytes { current[index - pixel_bytes] } else { 0 };
             let up = previous[index];
-            let up_left = if index >= channels { previous[index - channels] } else { 0 };
+            let up_left = if index >= pixel_bytes { previous[index - pixel_bytes] } else { 0 };
             let predicted = match filter {
                 0 => 0,
                 1 => left,
@@ -309,10 +271,89 @@ fn png_pixels(input: &[u8]) -> Result<Pixels, OpError> {
         samples.extend_from_slice(&current);
         previous = current;
     }
+    Ok(samples)
+}
+
+/// The seven passes of an interlaced PNG: where each starts and how far apart its
+/// pixels are, across and down.
+const ADAM7: [(usize, usize, usize, usize); 7] =
+    [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)];
+
+/// Decodes the pixels of a PNG with 8 or 16 bits per value. Images with fewer bits
+/// per value are reported, not guessed at.
+fn png_pixels(input: &[u8]) -> Result<Pixels, OpError> {
+    let (chunks, _) = png_chunks(input)?;
+    let header = chunks
+        .first()
+        .filter(|chunk| chunk.kind == b"IHDR" && chunk.data.len() == 13)
+        .ok_or_else(|| OpError::invalid_input("The PNG has no header chunk"))?
+        .data;
+    let width = u32::from_be_bytes([header[0], header[1], header[2], header[3]]) as usize;
+    let height = u32::from_be_bytes([header[4], header[5], header[6], header[7]]) as usize;
+    let (depth, color_type, interlaced) = (header[8], header[9], header[12] != 0);
+    if depth != 8 && depth != 16 {
+        return Err(OpError::invalid_input(format!("{depth}-bit PNG images are not supported")));
+    }
+    let channels = match color_type {
+        0 | 3 => 1,
+        4 => 2,
+        2 => 3,
+        6 => 4,
+        other => return Err(OpError::invalid_input(format!("Unknown PNG colour type {other}"))),
+    };
+    let value_bytes = usize::from(depth / 8);
+    let pixel_bytes = channels * value_bytes;
+    let too_large = || OpError::invalid_input("The image is empty or too large to decode");
+    let stored = |columns: usize, rows: usize| {
+        columns.checked_mul(pixel_bytes).and_then(|row| (row + 1).checked_mul(rows))
+    };
+    let passes: Vec<(usize, usize, usize, usize)> =
+        if interlaced { ADAM7.to_vec() } else { vec![(0, 0, 1, 1)] };
+    let pass_size = |&(x0, y0, dx, dy): &(usize, usize, usize, usize)| {
+        (width.saturating_sub(x0).div_ceil(dx), height.saturating_sub(y0).div_ceil(dy))
+    };
+    let total = passes
+        .iter()
+        .map(pass_size)
+        .filter(|(columns, rows)| *columns > 0 && *rows > 0)
+        .try_fold(0usize, |sum, (columns, rows)| sum.checked_add(stored(columns, rows)?))
+        .filter(|total| *total > 0 && *total <= MAX_PIXEL_BYTES)
+        .ok_or_else(too_large)?;
+
+    let compressed: Vec<u8> = chunks
+        .iter()
+        .filter(|chunk| chunk.kind == b"IDAT")
+        .flat_map(|chunk| chunk.data.iter().copied())
+        .collect();
+    let mut raw = Vec::with_capacity(total);
+    ZlibDecoder::new(compressed.as_slice())
+        .take(total as u64)
+        .read_to_end(&mut raw)
+        .map_err(|_| OpError::invalid_input("The PNG's pixel data does not decompress"))?;
+
+    // One value per channel, in place in the full image. Of a 16-bit value the low
+    // byte is kept, which is where its lowest bits are.
+    let mut values = vec![0u8; width * height * channels];
+    let mut rest = raw.as_slice();
+    for pass in &passes {
+        let (columns, rows) = pass_size(pass);
+        if columns == 0 || rows == 0 {
+            continue;
+        }
+        let (x0, y0, dx, dy) = *pass;
+        let samples = unfilter(&mut rest, columns * pixel_bytes, rows, pixel_bytes)?;
+        for (index, pixel) in samples.chunks_exact(pixel_bytes).enumerate() {
+            let (x, y) = (x0 + index % columns * dx, y0 + index / columns * dy);
+            for channel in 0..channels {
+                values[(y * width + x) * channels + channel] =
+                    pixel[channel * value_bytes + value_bytes - 1];
+            }
+        }
+    }
 
     let palette = chunks.iter().find(|chunk| chunk.kind == b"PLTE").map(|chunk| chunk.data);
     let mut rgba = Vec::with_capacity(width * height * 4);
-    for pixel in samples.chunks_exact(channels) {
+    for pixel in values.chunks_exact(channels) {
         rgba.extend_from_slice(&match (color_type, pixel) {
             (0, [gray]) => [*gray, *gray, *gray, 255],
             (4, [gray, alpha]) => [*gray, *gray, *gray, *alpha],
@@ -328,7 +369,90 @@ fn png_pixels(input: &[u8]) -> Result<Pixels, OpError> {
             _ => unreachable!("chunks_exact yields the channel count"),
         });
     }
-    Ok(Pixels { rgba, width, height })
+    Ok(Pixels { rgba, width, height, exact: depth == 8 })
+}
+
+/// Decodes an uncompressed 24- or 32-bit BMP, the kind paint programs write.
+fn bmp_pixels(input: &[u8]) -> Result<Pixels, OpError> {
+    let broken = || OpError::invalid_input("The BMP header is incomplete");
+    let le32 = |at: usize| input.get(at..at + 4).map(|b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+    let start = le32(10).ok_or_else(broken)? as usize;
+    let (width, height) = (le32(18).ok_or_else(broken)? as i32, le32(22).ok_or_else(broken)? as i32);
+    let bits = input.get(28..30).map(|b| u16::from_le_bytes([b[0], b[1]])).ok_or_else(broken)?;
+    let compression = le32(30).ok_or_else(broken)?;
+    let pixel_bytes = match (bits, compression) {
+        (24, 0) => 3,
+        (32, 0 | 3) => 4,
+        _ => {
+            return Err(OpError::invalid_input(format!(
+                "Only uncompressed 24- and 32-bit BMP images are supported; this one is {bits}-bit"
+            )))
+        }
+    };
+    let (columns, rows) = (width.unsigned_abs() as usize, height.unsigned_abs() as usize);
+    // Rows are padded to a multiple of four bytes.
+    let row_bytes = columns.checked_mul(pixel_bytes).map(|row| row.div_ceil(4) * 4);
+    let data = row_bytes
+        .and_then(|row| row.checked_mul(rows))
+        .filter(|total| *total > 0 && *total <= MAX_PIXEL_BYTES)
+        .and_then(|total| input.get(start..start.checked_add(total)?))
+        .ok_or_else(|| OpError::invalid_input("The BMP is empty, too large, or cut short"))?;
+    let row_bytes = row_bytes.expect("checked with the total");
+
+    let mut rgba = Vec::with_capacity(columns * rows * 4);
+    for y in 0..rows {
+        // A positive height means the bottom row comes first.
+        let stored = if height > 0 { rows - 1 - y } else { y };
+        let row = &data[stored * row_bytes..][..columns * pixel_bytes];
+        for pixel in row.chunks_exact(pixel_bytes) {
+            let alpha = if pixel_bytes == 4 { pixel[3] } else { 255 };
+            rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], alpha]);
+        }
+    }
+    Ok(Pixels { rgba, width: columns, height: rows, exact: true })
+}
+
+fn pixels(input: &[u8]) -> Result<Pixels, OpError> {
+    match signature(input) {
+        Some("PNG image") => png_pixels(input),
+        Some("BMP image") => bmp_pixels(input),
+        _ => Err(OpError::invalid_input("This works on PNG and BMP images, whose pixels are stored exactly")),
+    }
+}
+
+fn png_chunk(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+    let mut chunk = (data.len() as u32).to_be_bytes().to_vec();
+    chunk.extend(kind);
+    chunk.extend(data);
+    let mut checksum = crc32fast::Hasher::new();
+    checksum.update(kind);
+    checksum.update(data);
+    chunk.extend(checksum.finalize().to_be_bytes());
+    chunk
+}
+
+/// Writes pixels as an 8-bit RGBA PNG. PNG is lossless, so every bit survives.
+fn encode_png(pixels: &Pixels) -> Vec<u8> {
+    let mut raw = Vec::with_capacity((pixels.width * 4 + 1) * pixels.height);
+    for row in pixels.rgba.chunks_exact(pixels.width * 4) {
+        // Filter 0: the row as it is.
+        raw.push(0);
+        raw.extend_from_slice(row);
+    }
+    let mut encoder = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut encoder, &raw).expect("writing to memory");
+    let compressed = encoder.finish().expect("writing to memory");
+
+    let mut header = (pixels.width as u32).to_be_bytes().to_vec();
+    header.extend((pixels.height as u32).to_be_bytes());
+    // Eight bits per value, RGBA, and the only compression, filter and interlace
+    // methods there are.
+    header.extend([8, 6, 0, 0, 0]);
+    let mut png = PNG_SIGNATURE.to_vec();
+    png.extend(png_chunk(b"IHDR", &header));
+    png.extend(png_chunk(b"IDAT", &compressed));
+    png.extend(png_chunk(b"IEND", &[]));
+    png
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Tsify)]
@@ -357,13 +481,41 @@ impl Default for LsbConfig {
     }
 }
 
+fn lsb_params() -> Vec<ParamSpec> {
+    let orders = ["rows", "columns"].map(String::from).to_vec();
+    vec![
+        ParamSpec::new("channels", "Channels", ParamKind::Text),
+        ParamSpec::new("bit", "Bit", ParamKind::Int { min: Some(0), max: Some(7) }),
+        ParamSpec::new("order", "Pixel order", ParamKind::Choice { options: orders }),
+    ]
+}
+
+/// The position in the RGBA data of every value the settings select, in reading order.
+fn selected_values(config: &LsbConfig, width: usize, height: usize) -> Result<Vec<usize>, OpError> {
+    let offsets: Vec<usize> = config
+        .channels
+        .chars()
+        .map(|channel| "rgba".find(channel.to_ascii_lowercase()))
+        .collect::<Option<_>>()
+        .filter(|offsets: &Vec<usize>| !offsets.is_empty())
+        .ok_or_else(|| OpError::invalid_config("Channels is a combination of r, g, b and a, such as rgb"))?;
+    if config.bit > 7 {
+        return Err(OpError::invalid_config("Bit is a number from 0 to 7"));
+    }
+    let order: Vec<usize> = match config.order {
+        PixelOrder::Rows => (0..width * height).collect(),
+        PixelOrder::Columns => (0..width).flat_map(|x| (0..height).map(move |y| y * width + x)).collect(),
+    };
+    Ok(order.iter().flat_map(|pixel| offsets.iter().map(move |offset| pixel * 4 + offset)).collect())
+}
+
 pub struct LsbExtract;
 
 impl Op for LsbExtract {
     const ID: &'static str = "lsb-extract";
-    const NAME: &'static str = "Extract LSB (PNG)";
+    const NAME: &'static str = "Extract LSB";
     const DESCRIPTION: &'static str =
-        "Collects one bit from each colour value of a PNG's pixels into bytes: where LSB steganography hides data";
+        "Collects one bit from each colour value of a PNG or BMP image's pixels into bytes: where LSB steganography hides data";
     const LINK: Option<&'static str> = Some("https://en.wikipedia.org/wiki/Bit_numbering#Least_significant_bit_in_digital_steganography");
     const TAGS: &'static [Tag] = &[Tag::Steganography];
 
@@ -372,47 +524,59 @@ impl Op for LsbExtract {
     type Out = Vec<u8>;
 
     fn params() -> Vec<ParamSpec> {
-        let orders = ["rows", "columns"].map(String::from).to_vec();
-        vec![
-            ParamSpec::new("channels", "Channels", ParamKind::Text),
-            ParamSpec::new("bit", "Bit", ParamKind::Int { min: Some(0), max: Some(7) }),
-            ParamSpec::new("order", "Pixel order", ParamKind::Choice { options: orders }),
-        ]
+        lsb_params()
     }
 
     fn run(config: &LsbConfig, input: &[u8]) -> Result<Vec<u8>, OpError> {
-        let offsets: Vec<usize> = config
-            .channels
-            .chars()
-            .map(|channel| "rgba".find(channel.to_ascii_lowercase()))
-            .collect::<Option<_>>()
-            .filter(|offsets: &Vec<usize>| !offsets.is_empty())
-            .ok_or_else(|| OpError::invalid_config("Channels is a combination of r, g, b and a, such as rgb"))?;
-        if config.bit > 7 {
-            return Err(OpError::invalid_config("Bit is a number from 0 to 7"));
-        }
-        let Pixels { rgba, width, height } = png_pixels(input)?;
+        let Pixels { rgba, width, height, .. } = pixels(input)?;
+        let values = selected_values(config, width, height)?;
+        // The first bit read is the highest bit of the byte it goes into.
+        Ok(values
+            .chunks_exact(8)
+            .map(|group| group.iter().fold(0u8, |byte, at| byte << 1 | (rgba[*at] >> config.bit & 1)))
+            .collect())
+    }
+}
 
-        let mut output = Vec::with_capacity(width * height * offsets.len() / 8);
-        let (mut byte, mut filled) = (0u8, 0u8);
-        let mut take = |pixel: usize| {
-            for offset in &offsets {
-                // The first bit read is the highest bit of the byte it goes into.
-                byte = byte << 1 | (rgba[pixel * 4 + offset] >> config.bit & 1);
-                filled += 1;
-                if filled == 8 {
-                    output.push(byte);
-                    (byte, filled) = (0, 0);
-                }
-            }
-        };
-        match config.order {
-            PixelOrder::Rows => (0..width * height).for_each(&mut take),
-            PixelOrder::Columns => {
-                (0..width).for_each(|x| (0..height).for_each(|y| take(y * width + x)));
-            }
+pub struct LsbEmbed;
+
+impl Op for LsbEmbed {
+    const ID: &'static str = "lsb-embed";
+    const NAME: &'static str = "Embed LSB";
+    const DESCRIPTION: &'static str =
+        "Hides data in one bit of each colour value of an image and writes the result as a PNG. Extract LSB with the same settings reads it back";
+    const LINK: Option<&'static str> = Some("https://en.wikipedia.org/wiki/Bit_numbering#Least_significant_bit_in_digital_steganography");
+    const TAGS: &'static [Tag] = &[Tag::Steganography];
+    const INPUTS: &'static [&'static str] = &["image", "data"];
+
+    type Config = LsbConfig;
+    type In<'a> = (&'a [u8], &'a [u8]);
+    type Out = Vec<u8>;
+
+    fn params() -> Vec<ParamSpec> {
+        lsb_params()
+    }
+
+    fn run(config: &LsbConfig, (image, data): Self::In<'_>) -> Result<Vec<u8>, OpError> {
+        let mut carrier = pixels(image)?;
+        if !carrier.exact {
+            return Err(OpError::invalid_input(
+                "A 16-bit image cannot be written back; convert it to 8-bit first",
+            ));
         }
-        Ok(output)
+        let values = selected_values(config, carrier.width, carrier.height)?;
+        if data.len() * 8 > values.len() {
+            return Err(OpError::invalid_input(format!(
+                "The data is {} bytes, but with these settings the image holds only {}",
+                data.len(),
+                values.len() / 8
+            )));
+        }
+        let bits = data.iter().flat_map(|byte| (0..8).rev().map(move |shift| byte >> shift & 1));
+        for (at, bit) in values.iter().zip(bits) {
+            carrier.rgba[*at] = carrier.rgba[*at] & !(1 << config.bit) | bit << config.bit;
+        }
+        Ok(encode_png(&carrier))
     }
 }
 
@@ -538,10 +702,10 @@ mod tests {
 
     #[test]
     fn unsupported_and_broken_images_are_explained() {
-        let mut sixteen_bit = png(1, 1, 2, &[0, 0, 0], 0, &[]);
-        sixteen_bit[24] = 16;
-        let error = LsbExtract::run(&LsbConfig::default(), &sixteen_bit).unwrap_err();
-        assert!(error.message.contains("16-bit"), "{}", error.message);
+        let mut four_bit = png(1, 1, 0, &[0], 0, &[]);
+        four_bit[24] = 4;
+        let error = LsbExtract::run(&LsbConfig::default(), &four_bit).unwrap_err();
+        assert!(error.message.contains("4-bit"), "{}", error.message);
         let not_png = LsbExtract::run(&LsbConfig::default(), b"GIF89a").unwrap_err();
         assert_eq!(not_png.code, ErrorCode::InvalidInput);
         let bad = LsbConfig { channels: "xyz".into(), ..LsbConfig::default() };
@@ -549,6 +713,100 @@ mod tests {
         assert_eq!(LsbExtract::run(&bad, &image).unwrap_err().code, ErrorCode::InvalidConfig);
         let cut = &image[..image.len() - 20];
         assert_eq!(LsbExtract::run(&LsbConfig::default(), cut).unwrap_err().code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn embedding_writes_a_png_that_extraction_reads_back() {
+        let image = png(16, 8, 2, &carrier(b""), 2, &[]);
+        let secret = b"ctf{wr1tten_and_r3ad}";
+        for config in [
+            LsbConfig::default(),
+            LsbConfig { channels: "bg".into(), bit: 1, order: PixelOrder::Columns },
+        ] {
+            let hidden = LsbEmbed::run(&config, (&image, secret)).unwrap();
+            assert!(hidden.starts_with(PNG_SIGNATURE));
+            assert!(LsbExtract::run(&config, &hidden).unwrap().starts_with(secret), "{config:?}");
+            // Only the chosen bit of the chosen values changed.
+            let (before, after) = (pixels(&image).unwrap(), pixels(&hidden).unwrap());
+            let mask = !(1u8 << config.bit);
+            assert!(before.rgba.iter().zip(&after.rgba).all(|(a, b)| a & mask == b & mask));
+        }
+        let too_much = LsbEmbed::run(&LsbConfig::default(), (&image, &[0u8; 49])).unwrap_err();
+        assert!(too_much.message.contains("holds only 48"), "{}", too_much.message);
+    }
+
+    #[test]
+    fn an_interlaced_image_decodes_to_the_same_pixels() {
+        let (width, height) = (11usize, 9usize);
+        let samples: Vec<u8> = (0..width * height * 3).map(|i| (i * 53 % 256) as u8).collect();
+        // Store the same pixels pass by pass, each row unfiltered.
+        let mut raw = Vec::new();
+        for (x0, y0, dx, dy) in ADAM7 {
+            for y in (y0..height).step_by(dy) {
+                if x0 >= width {
+                    continue;
+                }
+                raw.push(0);
+                for x in (x0..width).step_by(dx) {
+                    raw.extend_from_slice(&samples[(y * width + x) * 3..][..3]);
+                }
+            }
+        }
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&raw).unwrap();
+        let mut header = (width as u32).to_be_bytes().to_vec();
+        header.extend((height as u32).to_be_bytes());
+        header.extend([8, 2, 0, 0, 1]);
+        let mut interlaced = PNG_SIGNATURE.to_vec();
+        interlaced.extend(chunk(b"IHDR", &header));
+        interlaced.extend(chunk(b"IDAT", &encoder.finish().unwrap()));
+        interlaced.extend(chunk(b"IEND", &[]));
+
+        let plain = png(width as u32, height as u32, 2, &samples, 0, &[]);
+        assert_eq!(pixels(&interlaced).unwrap().rgba, pixels(&plain).unwrap().rgba);
+    }
+
+    #[test]
+    fn sixteen_bit_values_contribute_their_low_byte() {
+        // One pixel, RGB, two bytes per value: the low bytes are 1, 0, 1.
+        let mut raw = vec![0u8];
+        raw.extend([0xff, 0x01, 0xff, 0x00, 0xff, 0x01]);
+        let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(&raw).unwrap();
+        let mut header = 1u32.to_be_bytes().to_vec();
+        header.extend(1u32.to_be_bytes());
+        header.extend([16, 2, 0, 0, 0]);
+        let mut image = PNG_SIGNATURE.to_vec();
+        image.extend(chunk(b"IHDR", &header));
+        image.extend(chunk(b"IDAT", &encoder.finish().unwrap()));
+        image.extend(chunk(b"IEND", &[]));
+        let decoded = pixels(&image).unwrap();
+        assert_eq!(decoded.rgba, [1, 0, 1, 255]);
+        assert!(!decoded.exact);
+        assert!(LsbEmbed::run(&LsbConfig::default(), (&image, b"")).unwrap_err().message.contains("16-bit"));
+    }
+
+    #[test]
+    fn a_bmp_is_read_bottom_up_with_blue_first() {
+        // 2 x 2, 24-bit: rows padded to 8 bytes, the bottom row stored first.
+        let mut bmp = b"BM".to_vec();
+        bmp.extend([0u8; 8]);
+        bmp.extend(54u32.to_le_bytes());
+        bmp.extend(40u32.to_le_bytes());
+        bmp.extend(2i32.to_le_bytes());
+        bmp.extend(2i32.to_le_bytes());
+        bmp.extend(1u16.to_le_bytes());
+        bmp.extend(24u16.to_le_bytes());
+        bmp.extend([0u8; 24]);
+        // Bottom row: (r3 g2 b1), (r6 g5 b4). Top row: (r9 g8 b7), (r12 g11 b10).
+        bmp.extend([1, 2, 3, 4, 5, 6, 0, 0]);
+        bmp.extend([7, 8, 9, 10, 11, 12, 0, 0]);
+        let decoded = pixels(&bmp).unwrap();
+        assert_eq!((decoded.width, decoded.height), (2, 2));
+        assert_eq!(decoded.rgba, [9, 8, 7, 255, 12, 11, 10, 255, 3, 2, 1, 255, 6, 5, 4, 255]);
+        // Red of the four pixels, low bit: 1, 0, 1, 0, then green: 0, 1, 0, 1.
+        let config = LsbConfig { channels: "rg".into(), bit: 0, order: PixelOrder::Rows };
+        assert_eq!(LsbExtract::run(&config, &bmp).unwrap(), [0b1001_1001]);
     }
 
     #[test]

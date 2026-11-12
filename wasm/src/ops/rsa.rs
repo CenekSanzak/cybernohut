@@ -412,6 +412,100 @@ impl Op for RsaAnalyze {
     }
 }
 
+/// One element of DER: its tag and its contents.
+fn der_element(input: &[u8]) -> Option<(u8, &[u8], &[u8])> {
+    let (&tag, rest) = input.split_first()?;
+    let (&first, rest) = rest.split_first()?;
+    let (length, rest) = if first < 0x80 {
+        (usize::from(first), rest)
+    } else {
+        // The low bits say how many bytes the length itself takes.
+        let count = usize::from(first & 0x7f);
+        let (bytes, rest) = rest.split_at_checked(count).filter(|_| count <= 4)?;
+        (bytes.iter().fold(0usize, |length, byte| length << 8 | usize::from(*byte)), rest)
+    };
+    let (contents, after) = rest.split_at_checked(length)?;
+    Some((tag, contents, after))
+}
+
+const DER_INTEGER: u8 = 0x02;
+const DER_BIT_STRING: u8 = 0x03;
+const DER_OCTET_STRING: u8 = 0x04;
+const DER_SEQUENCE: u8 = 0x30;
+
+/// The numbers of the RSA key inside a DER structure, however it is wrapped: a bare
+/// key is a sequence of integers, and the generic formats put that sequence inside a
+/// bit string or an octet string next to an algorithm identifier.
+fn der_key_numbers(der: &[u8]) -> Option<Vec<BigUint>> {
+    let (tag, contents, _) = der_element(der)?;
+    if tag != DER_SEQUENCE {
+        return None;
+    }
+    let mut elements = Vec::new();
+    let mut rest = contents;
+    while !rest.is_empty() {
+        let (tag, body, after) = der_element(rest)?;
+        elements.push((tag, body));
+        rest = after;
+    }
+    let integers: Vec<BigUint> = elements
+        .iter()
+        .filter(|(tag, _)| *tag == DER_INTEGER)
+        .map(|(_, body)| BigUint::from_bytes_be(body))
+        .collect();
+    if integers.len() == elements.len() && integers.len() >= 2 {
+        return Some(integers);
+    }
+    elements.iter().find_map(|(tag, body)| match *tag {
+        // A bit string starts with the count of unused bits in its last byte.
+        DER_BIT_STRING => der_key_numbers(body.get(1..)?),
+        DER_OCTET_STRING => der_key_numbers(body),
+        _ => None,
+    })
+}
+
+pub struct RsaParseKey;
+
+impl Op for RsaParseKey {
+    const ID: &'static str = "rsa-parse-key";
+    const NAME: &'static str = "RSA Parse Key";
+    const DESCRIPTION: &'static str =
+        "Reads an RSA key in PEM form (BEGIN PUBLIC KEY, BEGIN RSA PRIVATE KEY and the like) and lists its numbers";
+    const LINK: Option<&'static str> = Some("https://en.wikipedia.org/wiki/Privacy-Enhanced_Mail");
+    const TAGS: &'static [Tag] = &[Tag::Encryption, Tag::DataFormat];
+
+    type Config = crate::core::NoConfig;
+    type In<'a> = &'a str;
+    type Out = String;
+
+    fn run(_: &Self::Config, input: &str) -> Result<String, OpError> {
+        if input.contains("ENCRYPTED") {
+            return Err(OpError::invalid_input("The key is encrypted with a passphrase"));
+        }
+        // What is left without the BEGIN and END lines is Base64 of the DER structure.
+        let body: String = input
+            .lines()
+            .filter(|line| !line.starts_with("-----"))
+            .flat_map(str::chars)
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let der = base64_simd::STANDARD
+            .decode_to_vec(body)
+            .map_err(|_| OpError::invalid_input("Not a PEM key: the part between the BEGIN and END lines is not Base64"))?;
+        let numbers = der_key_numbers(&der)
+            .ok_or_else(|| OpError::invalid_input("No RSA key found in this PEM block"))?;
+        Ok(match numbers.as_slice() {
+            [n, e] => format!("RSA public key, {} bits\nn = {n}\ne = {e}", n.bits()),
+            // A private key starts with a version number, then the numbers in order.
+            [_, n, e, d, p, q, ..] => format!(
+                "RSA private key, {} bits\nn = {n}\ne = {e}\nd = {d}\np = {p}\nq = {q}",
+                n.bits()
+            ),
+            _ => return Err(OpError::invalid_input("No RSA key found in this PEM block")),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -526,5 +620,46 @@ mod tests {
         }
         let too_big = RsaEncrypt::run(&RsaEncryptConfig { n: N.into(), e: E.into() }, b"too long").unwrap_err();
         assert_eq!(too_big.code, ErrorCode::InvalidInput);
+    }
+
+    // A throwaway 512-bit key from `openssl genrsa`, in the four PEM layouts.
+    const KEY_N: &str = "9149988259630918411102109321269683555117347049056278823031413073475846765755104319359290911251155363253307202852137032308364204762324481779927525165777881";
+    const KEY_D: &str = "8082906149245043112933846789532432972823957307445629280873104177423603043419975086848731095035958234769685003385438240143482146432941289122824224434935041";
+    const KEY_P: &str = "102496155640956093585101628041038959264367199804744037377427124884687686203049";
+    const KEY_Q: &str = "89271526355420743441080153941914974652021444563374243175657528526597510107569";
+    const PEM_PRIVATE: &str = "-----BEGIN RSA PRIVATE KEY-----\nMIIBPAIBAAJBAK60NgKEVnvh/V07TwP719PzDDYPULpR+5XJt/fMLWqI6uuNAEYN\npgrKgnrJX9KzYoWFv8Eugdmk+QlLZA9yQ9kCAwEAAQJBAJpUbBnRGi0ZuB4yFF0q\njsCXRkRDR0cwwRTTO4bVgZFHp+a1GuPfxTint0k/8Q4Fhx/mgU2Mf5F8RHcAfQVF\n1QECIQDimsStQKORK8smb+hhj53V57BHAOSdQTvYArPEydf2qQIhAMVd5LJjR21H\nuJVRtj2+HadoIuJxSc70a/fTcdUs85GxAiEAzE5eJRayYqDpeK5NBilGVSWfeWUE\nugOmwQsuqa6SWIECIQCuxvsjTe+OwpifAoFUI+u2t+1Mge5OqvyBtmlz0h7PwQIg\nMFXyIF8RtUsmUHvpEUUaQ2L0Ywfh2QeTT73gvzlsT88=\n-----END RSA PRIVATE KEY-----\n";
+    const PEM_PRIVATE_PKCS8: &str = "-----BEGIN PRIVATE KEY-----\nMIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEArrQ2AoRWe+H9XTtP\nA/vX0/MMNg9QulH7lcm398wtaojq640ARg2mCsqCeslf0rNihYW/wS6B2aT5CUtk\nD3JD2QIDAQABAkEAmlRsGdEaLRm4HjIUXSqOwJdGRENHRzDBFNM7htWBkUen5rUa\n49/FOKe3ST/xDgWHH+aBTYx/kXxEdwB9BUXVAQIhAOKaxK1Ao5EryyZv6GGPndXn\nsEcA5J1BO9gCs8TJ1/apAiEAxV3ksmNHbUe4lVG2Pb4dp2gi4nFJzvRr99Nx1Szz\nkbECIQDMTl4lFrJioOl4rk0GKUZVJZ95ZQS6A6bBCy6prpJYgQIhAK7G+yNN747C\nmJ8CgVQj67a37UyB7k6q/IG2aXPSHs/BAiAwVfIgXxG1SyZQe+kRRRpDYvRjB+HZ\nB5NPveC/OWxPzw==\n-----END PRIVATE KEY-----\n";
+    const PEM_PUBLIC: &str = "-----BEGIN PUBLIC KEY-----\nMFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAK60NgKEVnvh/V07TwP719PzDDYPULpR\n+5XJt/fMLWqI6uuNAEYNpgrKgnrJX9KzYoWFv8Eugdmk+QlLZA9yQ9kCAwEAAQ==\n-----END PUBLIC KEY-----\n";
+    const PEM_PUBLIC_PKCS1: &str = "-----BEGIN RSA PUBLIC KEY-----\nMEgCQQCutDYChFZ74f1dO08D+9fT8ww2D1C6UfuVybf3zC1qiOrrjQBGDaYKyoJ6\nyV/Ss2KFhb/BLoHZpPkJS2QPckPZAgMBAAE=\n-----END RSA PUBLIC KEY-----\n";
+
+    #[test]
+    fn keys_are_read_from_every_pem_layout() {
+        let parse = |pem: &str| RsaParseKey::run(&crate::core::NoConfig {}, pem).unwrap();
+        for pem in [PEM_PUBLIC, PEM_PUBLIC_PKCS1] {
+            assert_eq!(parse(pem), format!("RSA public key, 512 bits\nn = {KEY_N}\ne = 65537"));
+        }
+        for pem in [PEM_PRIVATE, PEM_PRIVATE_PKCS8] {
+            assert_eq!(
+                parse(pem),
+                format!("RSA private key, 512 bits\nn = {KEY_N}\ne = 65537\nd = {KEY_D}\np = {KEY_P}\nq = {KEY_Q}")
+            );
+        }
+    }
+
+    #[test]
+    fn a_parsed_key_decrypts_what_it_encrypted() {
+        let cipher = RsaEncrypt::run(&RsaEncryptConfig { n: KEY_N.into(), e: "65537".into() }, b"nohut").unwrap();
+        let config = decrypt_config(KEY_N, KEY_D, "", "", "");
+        assert_eq!(RsaDecrypt::run(&config, &cipher).unwrap(), b"nohut");
+        let from_primes = decrypt_config("", "", KEY_P, KEY_Q, "65537");
+        assert_eq!(RsaDecrypt::run(&from_primes, &cipher).unwrap(), b"nohut");
+    }
+
+    #[test]
+    fn text_that_is_not_a_key_is_explained() {
+        let parse = |text: &str| RsaParseKey::run(&crate::core::NoConfig {}, text).unwrap_err().message;
+        assert!(parse("hello there!").contains("not Base64"));
+        assert!(parse("-----BEGIN X-----\nAAAA\n-----END X-----").contains("No RSA key"));
+        assert!(parse("-----BEGIN ENCRYPTED PRIVATE KEY-----\nAAAA").contains("passphrase"));
     }
 }

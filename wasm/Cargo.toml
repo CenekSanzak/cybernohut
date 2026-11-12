@@ -23,6 +23,7 @@ base85 = "1.0.0"
 md-5 = "0.10.6"
 sha1 = "0.10.6"
 sha2 = "0.10.6"
+sha3 = "0.10"
 serde_json = { version = "1.0.138", features = ["preserve_order", "arbitrary_precision"] }
 js-sys = "0.3.77"
 serde = { version = "1.0.229", features = ["derive"] }

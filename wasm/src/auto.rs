@@ -86,6 +86,12 @@ fn sample(value: &Value) -> Value {
 pub fn suggest(value: &Value) -> Vec<Proposal> {
     let root = sample(value);
     let baseline = value_score(&root);
+    // Whether the search is looking at the start of the value rather than all of it.
+    let cut_short = match (value, &root) {
+        (Value::Text(full), Value::Text(start)) => start.len() < full.len(),
+        (Value::Bytes(full), Value::Bytes(start)) => start.len() < full.len(),
+        _ => false,
+    };
 
     let mut seen = HashSet::from([fingerprint(&root)]);
     let mut frontier: Vec<(Vec<ProposedStep>, Value)> = vec![(Vec::new(), root)];
@@ -99,8 +105,19 @@ pub fn suggest(value: &Value) -> Vec<Proposal> {
                     break;
                 }
                 let Some(detection) = (entry.detect)(value) else { continue };
-                let Ok(outputs) = (entry.run)(&detection.config, &[value]) else { continue };
-                let Some(output) = outputs.into_iter().next() else { continue };
+                let output = match (entry.run)(&detection.config, &[value]) {
+                    Ok(outputs) => outputs.into_iter().next(),
+                    // A compressed stream cut off by sampling fails to decompress, but
+                    // what it holds up to the cut is enough to carry on with.
+                    Err(_) if cut_short => match value {
+                        Value::Bytes(bytes) => {
+                            ops::compress::inflate_prefix(entry.id, bytes).map(Value::Bytes)
+                        }
+                        _ => None,
+                    },
+                    Err(_) => None,
+                };
+                let Some(output) = output else { continue };
                 if !seen.insert(fingerprint(&output)) {
                     continue;
                 }
@@ -328,6 +345,26 @@ mod tests {
             assert_eq!(replay(best, &input), Value::Text(turkish.into()), "{encoder}");
         }
         assert!(suggest(&Value::Text(turkish.into())).is_empty());
+    }
+
+    #[test]
+    fn compressed_data_larger_than_the_sample_is_still_followed() {
+        // Words in an order that does not compress away, so the stream is long.
+        let words = ["the", "message", "is", "hidden", "in", "a", "file", "that", "you", "will", "find", "here", "and", "nobody", "has", "opened", "it", "for", "years"];
+        let mut state = 12345u32;
+        let text: String = (0..120_000)
+            .map(|_| {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                words[(state >> 16) as usize % words.len()]
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+        let input = encode_text(&text, &[("gzip", json!({})), ("base64-standard-encode", json!({}))]);
+        let Value::Text(encoded) = &input else { panic!("base64 is text") };
+        assert!(encoded.len() > 2 * SAMPLE_BYTES, "the test needs input well past the sample");
+        let best = &suggest(&input)[0];
+        assert_eq!(ops_of(best), ["base64-standard-decode", "gunzip", "utf8-decode"]);
+        assert_eq!(replay(best, &input), Value::Text(text));
     }
 
     #[test]

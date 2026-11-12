@@ -1,4 +1,4 @@
-use data_encoding::{BASE32, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
+use data_encoding::{Encoding, BASE32, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
@@ -7,6 +7,32 @@ use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Tag};
 /// Encoded data is routinely wrapped or padded with whitespace; it carries no meaning.
 fn compact(input: &str) -> String {
     input.chars().filter(|c| !c.is_ascii_whitespace()).collect()
+}
+
+/// `data-encoding` asserts that the input is shorter than `usize::MAX / 512`, which on
+/// 32-bit wasm is about 8 MB, and panics past it. Feeding it block-aligned chunks keeps
+/// every call far below the limit without changing the result.
+const CHUNK_BLOCKS: usize = 1 << 16;
+
+/// `block` is the number of input bytes that encode to a whole number of symbols.
+fn encode_chunked(encoding: &Encoding, block: usize, input: &[u8]) -> String {
+    let mut output = String::with_capacity(encoding.encode_len(input.len().min(1 << 20)));
+    for chunk in input.chunks(block * CHUNK_BLOCKS) {
+        encoding.encode_append(chunk, &mut output);
+    }
+    output
+}
+
+/// `block` is the number of symbols that decode to a whole number of bytes.
+fn decode_chunked(encoding: &Encoding, block: usize, input: &[u8]) -> Result<Vec<u8>, String> {
+    let mut output = Vec::new();
+    for (index, chunk) in input.chunks(block * CHUNK_BLOCKS).enumerate() {
+        let decoded = encoding.decode(chunk).map_err(|e| {
+            format!("{} at position {}", e.kind, index * block * CHUNK_BLOCKS + e.position)
+        })?;
+        output.extend_from_slice(&decoded);
+    }
+    Ok(output)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
@@ -33,7 +59,8 @@ impl Op for Base16Encode {
     }
 
     fn run(config: &HexEncodeConfig, input: &[u8]) -> Result<String, OpError> {
-        Ok(if config.uppercase { HEXUPPER.encode(input) } else { HEXLOWER.encode(input) })
+        let encoding = if config.uppercase { &HEXUPPER } else { &HEXLOWER };
+        Ok(encode_chunked(encoding, 1, input))
     }
 }
 
@@ -51,8 +78,7 @@ impl Op for Base16Decode {
     type Out = Vec<u8>;
 
     fn run(_: &NoConfig, input: &str) -> Result<Vec<u8>, OpError> {
-        HEXLOWER_PERMISSIVE
-            .decode(compact(input).as_bytes())
+        decode_chunked(&HEXLOWER_PERMISSIVE, 2, compact(input).as_bytes())
             .map_err(|e| OpError::invalid_input(format!("Not valid hexadecimal: {e}")))
     }
 }
@@ -71,7 +97,7 @@ impl Op for Base32Encode {
     type Out = String;
 
     fn run(_: &NoConfig, input: &[u8]) -> Result<String, OpError> {
-        Ok(BASE32.encode(input))
+        Ok(encode_chunked(&BASE32, 5, input))
     }
 }
 
@@ -89,8 +115,7 @@ impl Op for Base32Decode {
     type Out = Vec<u8>;
 
     fn run(_: &NoConfig, input: &str) -> Result<Vec<u8>, OpError> {
-        BASE32
-            .decode(compact(input).as_bytes())
+        decode_chunked(&BASE32, 8, compact(input).as_bytes())
             .map_err(|e| OpError::invalid_input(format!("Not valid Base32: {e}")))
     }
 }
@@ -154,6 +179,18 @@ mod tests {
         assert_eq!(Base32Decode::run(&NoConfig {}, &b32).unwrap(), bytes);
         let b85 = Base85Encode::run(&NoConfig {}, &bytes).unwrap();
         assert_eq!(Base85Decode::run(&NoConfig {}, &b85).unwrap(), bytes);
+    }
+
+    #[test]
+    fn chunking_does_not_change_the_result() {
+        // Longer than one chunk for both encodings, and not block-aligned.
+        let bytes: Vec<u8> = (0..5 * CHUNK_BLOCKS + 7).map(|i| (i % 251) as u8).collect();
+        let hex = Base16Encode::run(&HexEncodeConfig::default(), &bytes).unwrap();
+        assert_eq!(hex, HEXLOWER.encode(&bytes));
+        assert_eq!(Base16Decode::run(&NoConfig {}, &hex).unwrap(), bytes);
+        let b32 = Base32Encode::run(&NoConfig {}, &bytes).unwrap();
+        assert_eq!(b32, BASE32.encode(&bytes));
+        assert_eq!(Base32Decode::run(&NoConfig {}, &b32).unwrap(), bytes);
     }
 
     #[test]

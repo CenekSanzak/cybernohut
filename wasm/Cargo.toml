@@ -2,7 +2,7 @@
 name = "wasm"
 version = "0.1.0"
 authors = ["dogukan <dogukanakarc@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -33,5 +33,7 @@ tsify = "0.5.8"
 wasm-bindgen-test = "0.3.34"
 
 [profile.release]
-# Tell `rustc` to optimize for small code size.
-opt-level = "s"
+# Speed over size: the point of the wasm core is throughput on large inputs.
+opt-level = 3
+lto = true
+codegen-units = 1

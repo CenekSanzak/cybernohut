@@ -12,7 +12,7 @@ import {
   type GraphSnapshot,
 } from "@/graph/persistence";
 import { useAutoMode } from "@/graph/useAutoMode";
-import { useEvaluation, useNodeOutput } from "@/graph/useEvaluation";
+import { useEvaluation, useNodeOutput, wasReleased } from "@/graph/useEvaluation";
 import { createInitialState, graphReducer } from "@/state/graphReducer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphCanvas } from "./GraphCanvas";
@@ -59,7 +59,12 @@ const Workspace: React.FC = () => {
   const [state, dispatch] = useReducer(graphReducer, undefined, loadInitialState);
   const [autoCalculate, setAutoCalculate] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { evaluation, run } = useEvaluation(state.nodes, state.edges, autoCalculate);
+  // The nodes whose full output the panel shows or auto mode reads.
+  const watched = useMemo(
+    () => [state.selectedNodeId, state.selectedInputId].filter(Boolean),
+    [state.selectedNodeId, state.selectedInputId]
+  );
+  const { evaluation, run } = useEvaluation(state.nodes, state.edges, autoCalculate, watched);
   const { reports } = evaluation;
 
   useEffect(() => {
@@ -122,6 +127,11 @@ const Workspace: React.FC = () => {
     const report = reports.get(selectedNode.id);
     switch (report?.status) {
       case "ok": {
+        if (wasReleased(report)) {
+          return autoCalculate
+            ? "Calculating…"
+            : "This step's output was released to save memory. Press Run to compute it again.";
+        }
         if (!selectedOutput) return "";
         const { text, truncated, total_chars } = selectedOutput;
         return truncated
@@ -139,10 +149,13 @@ const Workspace: React.FC = () => {
       default:
         return "";
     }
-  }, [selectedNode, reports, selectedOutput, evaluation.error]);
+  }, [selectedNode, reports, selectedOutput, evaluation.error, autoCalculate]);
 
   const selectedReport = selectedNode && reports.get(selectedNode.id);
-  const downloadable = selectedReport?.status === "ok" ? selectedReport.outputs[0] : undefined;
+  const downloadable =
+    selectedReport?.status === "ok" && selectedReport.retained
+      ? selectedReport.outputs[0]
+      : undefined;
   const handleDownload = useCallback(async () => {
     if (!selectedNode || !downloadable) return;
     const bytes = await engine.outputBytes(selectedNode.id, outputPorts(selectedNode.data)[0].name);
@@ -153,7 +166,8 @@ const Workspace: React.FC = () => {
 
   // Auto mode works on the selected step, or on the input when no step is selected.
   const autoTarget = selectedNode ?? selectedInput;
-  const autoReady = !!autoTarget && reports.get(autoTarget.id)?.status === "ok";
+  const autoReport = autoTarget && reports.get(autoTarget.id);
+  const autoReady = autoReport?.status === "ok" && autoReport.retained;
   const auto = useAutoMode(autoTarget, autoReady, evaluation.version, dispatch);
 
   const status = evaluation.running

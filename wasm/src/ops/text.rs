@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
+use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag, Value};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(default)]
@@ -44,6 +44,17 @@ impl Op for Utf8Decode {
                 e.valid_up_to()
             ))
         })
+    }
+
+    /// Valid bytes become the text without being copied.
+    fn take_over(_: &Utf8DecodeConfig, input: Value) -> Result<Result<Value, OpError>, Value> {
+        match input {
+            Value::Bytes(bytes) => match String::from_utf8(bytes) {
+                Ok(text) => Ok(Ok(Value::Text(text))),
+                Err(error) => Err(Value::Bytes(error.into_bytes())),
+            },
+            other => Err(other),
+        }
     }
 }
 

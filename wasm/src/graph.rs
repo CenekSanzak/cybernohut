@@ -63,7 +63,9 @@ pub type Sources = HashMap<String, Rc<Value>>;
 #[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum NodeReport {
-    Ok { id: String, outputs: Vec<OutputPreview> },
+    /// `retained` is false when the node ran but its output was let go to save
+    /// memory; only the preview is left, and the graph has to run again to show more.
+    Ok { id: String, outputs: Vec<OutputPreview>, retained: bool },
     Error { id: String, error: OpError },
     /// An input port has nothing connected to it yet.
     Waiting { id: String },
@@ -84,6 +86,8 @@ pub struct OutputPreview {
 
 pub enum Outcome {
     Ok(Vec<(String, Rc<Value>)>),
+    /// Succeeded, and the values have since been released. The previews remain.
+    Released(Vec<OutputPreview>),
     Error(OpError),
     Waiting,
     Blocked,
@@ -114,11 +118,12 @@ impl Evaluation {
                 match &self.outcomes[&id] {
                     Outcome::Ok(outputs) => NodeReport::Ok {
                         id,
-                        outputs: outputs
-                            .iter()
-                            .map(|(port, value)| preview(port, value, preview_chars))
-                            .collect(),
+                        outputs: previews(outputs, preview_chars),
+                        retained: true,
                     },
+                    Outcome::Released(outputs) => {
+                        NodeReport::Ok { id, outputs: outputs.clone(), retained: false }
+                    }
                     Outcome::Error(error) => NodeReport::Error { id, error: error.clone() },
                     Outcome::Waiting => NodeReport::Waiting { id },
                     Outcome::Blocked => NodeReport::Blocked { id },
@@ -128,11 +133,52 @@ impl Evaluation {
     }
 }
 
+fn previews(outputs: &[(String, Rc<Value>)], preview_chars: usize) -> Vec<OutputPreview> {
+    outputs.iter().map(|(port, value)| preview(port, value, preview_chars)).collect()
+}
+
+/// How much an evaluation may hold on to once it is done.
+///
+/// Keeping every intermediate result makes any node's output available at once, but a
+/// chain of six steps over a 200 MB file is then 1.2 GB. Past the budget, results that
+/// no later step needs are released, and a step that can work in place is given its
+/// input's memory instead of allocating its own.
+pub struct Retention<'a> {
+    /// Bytes of results to keep. Nothing is released below this.
+    pub budget_bytes: usize,
+    /// Nodes whose results are kept whatever the budget: the ones being looked at.
+    pub keep: &'a [String],
+    /// Released results leave a preview of this many characters behind.
+    pub preview_chars: usize,
+}
+
+impl Retention<'_> {
+    pub const EVERYTHING: Retention<'static> =
+        Retention { budget_bytes: usize::MAX, keep: &[], preview_chars: 0 };
+}
+
+fn held_bytes(value: &Value) -> usize {
+    match value {
+        Value::Text(text) => text.len(),
+        Value::Bytes(bytes) => bytes.len(),
+        Value::Number(_) => 8,
+        Value::TextList(items) => items.iter().map(String::len).sum(),
+        Value::NumberList(items) => items.len() * 8,
+    }
+}
+
+/// Evaluates the graph and keeps every result.
 pub fn evaluate(graph: &Graph, sources: &Sources) -> Evaluation {
+    evaluate_within(graph, sources, &Retention::EVERYTHING)
+}
+
+pub fn evaluate_within(graph: &Graph, sources: &Sources, retention: &Retention) -> Evaluation {
     let index: HashMap<&str, &GraphNode> = graph.nodes.iter().map(|n| (n.id(), n)).collect();
     let mut incoming: HashMap<&str, Vec<&GraphEdge>> = HashMap::new();
     let mut outgoing: HashMap<&str, Vec<&str>> = HashMap::new();
     let mut in_degree: HashMap<&str, usize> = graph.nodes.iter().map(|n| (n.id(), 0)).collect();
+    // How many steps have yet to read each node's results.
+    let mut readers_left: HashMap<&str, usize> = HashMap::new();
 
     for edge in &graph.edges {
         // Edges that point at missing nodes are leftovers of a deletion; ignore them.
@@ -142,17 +188,83 @@ pub fn evaluate(graph: &Graph, sources: &Sources) -> Evaluation {
         incoming.entry(&edge.target).or_default().push(edge);
         outgoing.entry(&edge.source).or_default().push(&edge.target);
         *in_degree.get_mut(edge.target.as_str()).expect("target was indexed") += 1;
+        *readers_left.entry(&edge.source).or_default() += 1;
     }
+
+    // A file's bytes belong to the page, not the evaluation, so releasing them here
+    // would free nothing.
+    let releasable = |id: &str| {
+        !retention.keep.iter().any(|kept| kept == id) && !matches!(index[id], GraphNode::File { .. })
+    };
+    let release = |evaluation: &mut Evaluation, id: &str| -> usize {
+        let Some(Outcome::Ok(outputs)) = evaluation.outcomes.get(id) else { return 0 };
+        let freed = outputs.iter().map(|(_, value)| held_bytes(value)).sum();
+        let left_behind = Outcome::Released(previews(outputs, retention.preview_chars));
+        evaluation.outcomes.insert(id.to_owned(), left_behind);
+        freed
+    };
 
     // Kahn's algorithm, seeded in declaration order so the result is deterministic.
     let mut queue: VecDeque<&str> =
         graph.nodes.iter().map(GraphNode::id).filter(|id| in_degree[id] == 0).collect();
     let mut evaluation = Evaluation::default();
+    let mut held = 0usize;
 
     while let Some(id) = queue.pop_front() {
-        let outcome = evaluate_node(index[id], incoming.get(id), sources, &evaluation);
+        let edges = incoming.get(id);
+
+        // Short of memory, a step that is the last reader of its only input is given
+        // that input to rewrite in place.
+        let mut handed_over = None;
+        if let (GraphNode::Op { per_line: false, .. }, Some([edge])) = (index[id], edges.map(Vec::as_slice)) {
+            let source = edge.source.as_str();
+            let size = match evaluation.outcomes.get(source) {
+                Some(Outcome::Ok(outputs)) if outputs.len() == 1 => held_bytes(&outputs[0].1),
+                _ => 0,
+            };
+            let last_reader = readers_left.get(source) == Some(&1);
+            if size > 0 && last_reader && releasable(source) && held + size > retention.budget_bytes {
+                let left_behind = match &evaluation.outcomes[source] {
+                    Outcome::Ok(outputs) => Outcome::Released(previews(outputs, retention.preview_chars)),
+                    _ => unreachable!("checked above"),
+                };
+                if let Some(Outcome::Ok(mut outputs)) = evaluation.outcomes.insert(source.to_owned(), left_behind) {
+                    held -= size;
+                    let (_, value) = outputs.remove(0);
+                    handed_over = Some(Rc::try_unwrap(value).unwrap_or_else(|shared| (*shared).clone()));
+                }
+            }
+        }
+
+        let outcome = evaluate_node(index[id], edges, sources, &evaluation, handed_over);
+        if let (Outcome::Ok(outputs), false) = (&outcome, matches!(index[id], GraphNode::File { .. })) {
+            held += outputs.iter().map(|(_, value)| held_bytes(value)).sum::<usize>();
+        }
         evaluation.order.push(id.to_owned());
         evaluation.outcomes.insert(id.to_owned(), outcome);
+
+        for edge in edges.into_iter().flatten() {
+            if let Some(left) = readers_left.get_mut(edge.source.as_str()) {
+                *left -= 1;
+            }
+        }
+        if held > retention.budget_bytes {
+            // Oldest first: what was computed early is least likely to be looked at.
+            let finished: Vec<String> = evaluation
+                .order
+                .iter()
+                .filter(|done| readers_left.get(done.as_str()).is_none_or(|left| *left == 0))
+                .filter(|done| releasable(done))
+                .cloned()
+                .collect();
+            for done in finished {
+                if held <= retention.budget_bytes {
+                    break;
+                }
+                held -= release(&mut evaluation, &done);
+            }
+        }
+
         for target in outgoing.get(id).into_iter().flatten() {
             let degree = in_degree.get_mut(target).expect("target was indexed");
             *degree -= 1;
@@ -179,6 +291,7 @@ fn evaluate_node(
     incoming: Option<&Vec<&GraphEdge>>,
     sources: &Sources,
     done: &Evaluation,
+    handed_over: Option<Value>,
 ) -> Outcome {
     let (op_id, config, per_line) = match node {
         GraphNode::Input { text, .. } => {
@@ -196,6 +309,16 @@ fn evaluate_node(
         return Outcome::Error(OpError::unknown_op(op_id));
     };
     let meta = (entry.meta)();
+
+    if let Some(value) = handed_over {
+        let port = &meta.inputs[0];
+        if !port.ty.accepts(value.value_type()) {
+            return Outcome::Error(mismatch(&port.name, port.ty, value.value_type()));
+        }
+        let result = (entry.take_over)(config, value)
+            .unwrap_or_else(|value| (entry.run)(config, &[&value]));
+        return finish(&meta, result);
+    }
 
     let mut inputs: Vec<Rc<Value>> = Vec::with_capacity(meta.inputs.len());
     for port in &meta.inputs {
@@ -225,6 +348,10 @@ fn evaluate_node(
     } else {
         (entry.run)(config, &refs)
     };
+    finish(&meta, result)
+}
+
+fn finish(meta: &OpMeta, result: Result<Vec<Value>, OpError>) -> Outcome {
     match result {
         Ok(values) => Outcome::Ok(
             meta.outputs.iter().map(|p| p.name.clone()).zip(values.into_iter().map(Rc::new)).collect(),
@@ -425,6 +552,109 @@ mod tests {
 
     fn text_of(evaluation: &Evaluation, node: &str) -> String {
         display(evaluation.output(node, "output").expect("node has an output"), usize::MAX).text
+    }
+
+    /// in -> rot13 -> xor -> utf8 -> upper, plus a second reader of `rot13`.
+    fn long_chain() -> Graph {
+        Graph {
+            nodes: vec![
+                input("in", "a text that is long enough to count"),
+                op("rot13", "rot13", json!({})),
+                op("xor", "xor", json!({ "key": "20", "keyFormat": "hex" })),
+                op("utf8", "utf8-decode", json!({})),
+                op("upper", "to-uppercase", json!({})),
+                op("side", "reverse", json!({})),
+            ],
+            edges: vec![
+                edge("in", "rot13"),
+                edge("rot13", "xor"),
+                edge("xor", "utf8"),
+                edge("utf8", "upper"),
+                edge("rot13", "side"),
+            ],
+        }
+    }
+
+    fn retained(evaluation: &Evaluation) -> Vec<&str> {
+        let mut ids: Vec<&str> = evaluation
+            .order
+            .iter()
+            .filter(|id| matches!(evaluation.outcomes[*id], Outcome::Ok(_)))
+            .map(String::as_str)
+            .collect();
+        ids.sort_unstable();
+        ids
+    }
+
+    #[test]
+    fn without_a_budget_every_result_is_kept() {
+        let evaluation = evaluate(&long_chain(), &Sources::new());
+        assert_eq!(retained(&evaluation), ["in", "rot13", "side", "upper", "utf8", "xor"]);
+    }
+
+    #[test]
+    fn past_the_budget_only_what_is_looked_at_is_kept_and_results_do_not_change() {
+        let graph = long_chain();
+        let everything = evaluate(&graph, &Sources::new());
+        let keep = ["upper".to_owned(), "side".to_owned()];
+        let tight = Retention { budget_bytes: 0, keep: &keep, preview_chars: 10 };
+        let evaluation = evaluate_within(&graph, &Sources::new(), &tight);
+
+        assert_eq!(retained(&evaluation), ["side", "upper"]);
+        for node in ["upper", "side"] {
+            assert_eq!(text_of(&evaluation, node), text_of(&everything, node));
+        }
+        // A released step still reports that it succeeded, with a preview.
+        let reports = evaluation.report(10);
+        let NodeReport::Ok { outputs, retained, .. } = &reports[1] else { panic!("rot13 ran") };
+        assert!(!retained);
+        assert_eq!(outputs[0].preview, "n grkg gun");
+        assert!(evaluation.output("rot13", "output").is_none());
+    }
+
+    #[test]
+    fn a_result_with_a_reader_still_to_come_is_not_given_away() {
+        // `rot13` feeds both `xor` and `side`. Whichever runs first must leave it intact.
+        let graph = long_chain();
+        let keep = ["side".to_owned()];
+        let tight = Retention { budget_bytes: 0, keep: &keep, preview_chars: 10 };
+        let evaluation = evaluate_within(&graph, &Sources::new(), &tight);
+        assert_eq!(
+            text_of(&evaluation, "side"),
+            text_of(&evaluate(&graph, &Sources::new()), "side")
+        );
+    }
+
+    #[test]
+    fn a_failing_step_after_a_hand_over_reports_its_own_error() {
+        let graph = Graph {
+            nodes: vec![
+                input("in", "plain text, more than a few bytes of it"),
+                op("xor", "xor", json!({ "key": "ff", "keyFormat": "hex" })),
+                op("utf8", "utf8-decode", json!({})),
+            ],
+            edges: vec![edge("in", "xor"), edge("xor", "utf8")],
+        };
+        let tight = Retention { budget_bytes: 0, keep: &[], preview_chars: 10 };
+        let evaluation = evaluate_within(&graph, &Sources::new(), &tight);
+        assert!(matches!(evaluation.outcomes["xor"], Outcome::Released(_)));
+        let Outcome::Error(error) = &evaluation.outcomes["utf8"] else { panic!("not valid text") };
+        assert!(error.message.contains("Not valid UTF-8"), "{}", error.message);
+    }
+
+    #[test]
+    fn a_file_is_never_released() {
+        let mut sources = Sources::new();
+        sources.insert("file".into(), Rc::new(Value::Bytes(vec![1, 2, 3, 4])));
+        let graph = Graph {
+            nodes: vec![GraphNode::File { id: "file".into() }, op("xor", "xor", json!({ "key": "k" }))],
+            edges: vec![edge("file", "xor")],
+        };
+        let tight = Retention { budget_bytes: 0, keep: &[], preview_chars: 10 };
+        let evaluation = evaluate_within(&graph, &sources, &tight);
+        assert!(matches!(evaluation.outcomes["file"], Outcome::Ok(_)));
+        // The file's bytes were read, not rewritten.
+        assert_eq!(*sources["file"], Value::Bytes(vec![1, 2, 3, 4]));
     }
 
     #[test]

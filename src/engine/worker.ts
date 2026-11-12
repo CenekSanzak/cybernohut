@@ -16,7 +16,7 @@ function handle(request: EngineRequest): EngineResponse {
   switch (request.type) {
     case "evaluate": {
       const started = performance.now();
-      const reports = wasm.evaluate(request.graph, PREVIEW_CHARS);
+      const reports = wasm.evaluate(request.graph, PREVIEW_CHARS, request.keep);
       return {
         type: "evaluated",
         id: request.id,

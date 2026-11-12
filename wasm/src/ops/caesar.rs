@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
+use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Suggestion, Tag, Value};
 use crate::score::{common_word_letters, text_score, ENGLISH_LETTER_PERCENT};
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
@@ -17,8 +17,13 @@ pub struct CaesarConfig {
 /// because all bytes of a multi-byte UTF-8 character are above the ASCII range, so
 /// they are never touched and the result is still UTF-8.
 fn shift_text(text: &str, shift: i32) -> String {
+    shift_owned(text.to_owned(), shift)
+}
+
+/// [`shift_text`] on text the caller gives up, reusing its memory.
+fn shift_owned(text: String, shift: i32) -> String {
     let shift = shift.rem_euclid(26) as u8;
-    let mut bytes = text.as_bytes().to_vec();
+    let mut bytes = text.into_bytes();
     for byte in &mut bytes {
         let base = match *byte {
             b'a'..=b'z' => b'a',
@@ -110,6 +115,16 @@ impl Op for CaesarCipher {
             .collect();
         Ok(candidates.join("\n"))
     }
+
+    fn take_over(config: &CaesarConfig, input: Value) -> Result<Result<Value, OpError>, Value> {
+        match input {
+            // Shift 0 lists every shift, which is a new and much larger text.
+            Value::Text(text) if config.shift != 0 => {
+                Ok(Ok(Value::Text(shift_owned(text, config.shift))))
+            }
+            other => Err(other),
+        }
+    }
 }
 
 pub struct Rot13;
@@ -137,6 +152,13 @@ impl Op for Rot13 {
 
     fn run(_: &NoConfig, input: &str) -> Result<String, OpError> {
         Ok(shift_text(input, 13))
+    }
+
+    fn take_over(_: &NoConfig, input: Value) -> Result<Result<Value, OpError>, Value> {
+        match input {
+            Value::Text(text) => Ok(Ok(Value::Text(shift_owned(text, 13)))),
+            other => Err(other),
+        }
     }
 }
 

@@ -4,8 +4,8 @@
 //!
 //! - Control data (the catalog, the graph description, per-node reports, errors) is
 //!   small and structured, so it goes through serde and gets generated TypeScript types.
-//! - Payloads stay in wasm memory. An evaluation keeps every value it produced, and
-//!   JavaScript copies one out only when it has to show it.
+//! - Payloads stay in wasm memory. An evaluation keeps the values it produced, up to a
+//!   memory budget, and JavaScript copies one out only when it has to show it.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,7 +15,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::auto::{self, Proposal};
 use crate::core::{OpMeta, Value, ValueType};
-use crate::graph::{self, Evaluation, Graph, NodeReport, OutputText, Sources};
+use crate::graph::{self, Evaluation, Graph, NodeReport, OutputText, Retention, Sources};
 use crate::ops;
 
 thread_local! {
@@ -25,6 +25,11 @@ thread_local! {
     /// wasm memory once, not on every run.
     static SOURCES: RefCell<Sources> = RefCell::new(Sources::new());
 }
+
+/// Results kept after a run so any node's output can be shown at once. Beyond this,
+/// results no later step needs are released; see [`Retention`]. The address space is
+/// 4 GB and a run also needs room for the step in flight, so this stays well below.
+const RETAINED_BYTES: usize = 512 * 1024 * 1024;
 
 fn to_js_error(error: impl std::fmt::Display) -> JsError {
     JsError::new(&error.to_string())
@@ -50,11 +55,20 @@ pub fn can_connect(from: Ts<ValueType>, to: Ts<ValueType>) -> Result<bool, JsErr
 /// Evaluates the graph and returns one report per node, in execution order.
 ///
 /// Failures of individual nodes are part of the report. This only throws when the
-/// graph description itself is malformed.
+/// graph description itself is malformed. `keep` names the nodes whose full output
+/// will be asked for, so they are not released when memory runs short.
 #[wasm_bindgen]
-pub fn evaluate(graph: Ts<Graph>, preview_chars: usize) -> Result<Vec<Ts<NodeReport>>, JsError> {
+pub fn evaluate(
+    graph: Ts<Graph>,
+    preview_chars: usize,
+    keep: Vec<String>,
+) -> Result<Vec<Ts<NodeReport>>, JsError> {
     let graph = graph.to_rust().map_err(to_js_error)?;
-    let evaluation = SOURCES.with(|sources| graph::evaluate(&graph, &sources.borrow()));
+    let retention = Retention { budget_bytes: RETAINED_BYTES, keep: &keep, preview_chars };
+    // The previous run's values go first: both sets at once would not fit.
+    LAST.with(|last| *last.borrow_mut() = Evaluation::default());
+    let evaluation =
+        SOURCES.with(|sources| graph::evaluate_within(&graph, &sources.borrow(), &retention));
     let reports = evaluation
         .report(preview_chars)
         .iter()

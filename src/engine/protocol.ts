@@ -2,7 +2,7 @@ import type { Graph, NodeReport, OutputText, Proposal } from "wasm";
 
 /** Messages from the page to the engine worker. */
 export type EngineRequest =
-  | { type: "evaluate"; id: number; graph: Graph }
+  | { type: "evaluate"; id: number; graph: Graph; keep: string[] }
   | { type: "output"; id: number; nodeId: string; port: string }
   | { type: "bytes"; id: number; nodeId: string; port: string }
   | { type: "suggest"; id: number; nodeId: string; port: string };

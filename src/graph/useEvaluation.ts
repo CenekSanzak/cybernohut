@@ -47,16 +47,31 @@ function useFingerprint(nodes: GraphNode[], edges: Edge[]): string {
   }, [nodes, edges]);
 }
 
-export function useEvaluation(nodes: GraphNode[], edges: Edge[], auto: boolean) {
+/** Whether a node ran but had its output released to save memory. */
+export function wasReleased(report: NodeReport | undefined): boolean {
+  return report?.status === "ok" && !report.retained;
+}
+
+/**
+ * Runs the graph when it changes. `keep` lists the nodes being looked at: with large
+ * data the engine releases other intermediate results, and looking at a released one
+ * runs the graph again with that node kept.
+ */
+export function useEvaluation(
+  nodes: GraphNode[],
+  edges: Edge[],
+  auto: boolean,
+  keep: readonly string[]
+) {
   const [evaluation, setEvaluation] = useState(EMPTY);
   const fingerprint = useFingerprint(nodes, edges);
-  const latest = useRef({ nodes, edges });
-  latest.current = { nodes, edges };
+  const latest = useRef({ nodes, edges, keep });
+  latest.current = { nodes, edges, keep };
 
   const run = useCallback(() => {
-    const { nodes, edges } = latest.current;
+    const { nodes, edges, keep } = latest.current;
     setEvaluation((previous) => ({ ...previous, running: true }));
-    engine.evaluate(toEngineGraph(nodes, edges)).then(
+    engine.evaluate(toEngineGraph(nodes, edges), [...keep]).then(
       ({ reports, elapsedMs }) =>
         setEvaluation((previous) => ({
           reports,
@@ -85,6 +100,20 @@ export function useEvaluation(nodes: GraphNode[], edges: Edge[], auto: boolean) 
     return () => clearTimeout(timer);
   }, [fingerprint, auto, run]);
 
+  // At most one extra run per selection and result, so a node that cannot be kept
+  // does not cause a loop.
+  const keepKey = keep.join(",");
+  const rerunFor = useRef("");
+  useEffect(() => {
+    if (!auto || evaluation.running) return;
+    const key = `${evaluation.version}:${keepKey}`;
+    const released = latest.current.keep.some((id) => wasReleased(evaluation.reports.get(id)));
+    if (released && rerunFor.current !== key) {
+      rerunFor.current = key;
+      run();
+    }
+  }, [auto, keepKey, evaluation, run]);
+
   return { evaluation, run };
 }
 
@@ -96,7 +125,8 @@ export function useNodeOutput(
   const [output, setOutput] = useState<OutputText>();
   const nodeId = node?.id;
   const port = node && outputPorts(node.data)[0]?.name;
-  const ready = nodeId !== undefined && evaluation.reports.get(nodeId)?.status === "ok";
+  const report = nodeId === undefined ? undefined : evaluation.reports.get(nodeId);
+  const ready = report?.status === "ok" && report.retained;
 
   useEffect(() => {
     if (!ready || nodeId === undefined || port === undefined) {

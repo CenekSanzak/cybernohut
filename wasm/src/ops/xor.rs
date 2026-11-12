@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 
-use crate::core::{Op, OpError, ParamKind, ParamSpec, Suggestion, Tag};
+use crate::core::{Op, OpError, ParamKind, ParamSpec, Suggestion, Tag, Value};
 use crate::score::{text_score, ENGLISH_LETTER_PERCENT};
 
 pub use super::key::KeyFormat;
@@ -171,6 +171,19 @@ impl Op for Xor {
     fn run(config: &XorConfig, input: &[u8]) -> Result<Vec<u8>, OpError> {
         let key = parse_key(&config.key, config.key_format)?;
         Ok(apply(input, &key))
+    }
+
+    fn take_over(config: &XorConfig, input: Value) -> Result<Result<Value, OpError>, Value> {
+        let Ok(key) = parse_key(&config.key, config.key_format) else { return Err(input) };
+        let mut bytes = match input {
+            Value::Bytes(bytes) => bytes,
+            Value::Text(text) => text.into_bytes(),
+            other => return Err(other),
+        };
+        for (byte, key) in bytes.iter_mut().zip(key.iter().cycle()) {
+            *byte ^= key;
+        }
+        Ok(Ok(Value::Bytes(bytes)))
     }
 }
 

@@ -118,11 +118,15 @@ class Engine {
     });
   }
 
-  /** Evaluates the graph. A node that fails is part of the result, not a rejection. */
-  async evaluate(graph: Graph): Promise<Evaluated> {
+  /**
+   * Evaluates the graph. A node that fails is part of the result, not a rejection.
+   * `keep` names the nodes whose full output will be asked for afterwards; when memory
+   * runs short the engine holds on to those and lets other intermediate results go.
+   */
+  async evaluate(graph: Graph, keep: string[] = []): Promise<Evaluated> {
     if (this.evaluating) this.replace(new Superseded());
     this.evaluating = true;
-    const response = await this.request({ type: "evaluate", graph });
+    const response = await this.request({ type: "evaluate", graph, keep });
     this.evaluating = false;
     if (response.type !== "evaluated") throw new Error("Unexpected engine response");
     return {

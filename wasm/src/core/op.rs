@@ -34,6 +34,14 @@ pub trait Op: 'static {
     }
 
     fn run(config: &Self::Config, input: Self::In<'_>) -> Result<Self::Out, OpError>;
+
+    /// Runs on an input nothing else needs any more, so its memory can become the
+    /// output instead of a new allocation. The engine offers this only when it is
+    /// short of memory. Handing the input back means "not this time" (the operation,
+    /// the config or the value does not allow it), and the engine calls [`Op::run`].
+    fn take_over(_config: &Self::Config, input: Value) -> Result<Result<Value, OpError>, Value> {
+        Err(input)
+    }
 }
 
 /// An operation's offer to process an input, from [`Op::detect`].
@@ -126,10 +134,17 @@ pub struct OpEntry {
     pub meta: fn() -> OpMeta,
     pub run: fn(&serde_json::Value, &[&Value]) -> Result<Vec<Value>, OpError>,
     pub detect: fn(&Value) -> Option<Detection>,
+    pub take_over: fn(&serde_json::Value, Value) -> Result<Result<Vec<Value>, OpError>, Value>,
 }
 
 pub fn entry<T: Op>() -> OpEntry {
-    OpEntry { id: T::ID, meta: meta_of::<T>, run: run_erased::<T>, detect: detect_erased::<T> }
+    OpEntry {
+        id: T::ID,
+        meta: meta_of::<T>,
+        run: run_erased::<T>,
+        detect: detect_erased::<T>,
+        take_over: take_over_erased::<T>,
+    }
 }
 
 fn ports(names: &[&str], types: Vec<ValueType>) -> Vec<Port> {
@@ -163,14 +178,26 @@ fn run_erased<'a, T: Op>(
     config: &serde_json::Value,
     inputs: &[&'a Value],
 ) -> Result<Vec<Value>, OpError> {
-    let config: T::Config = if config.is_null() {
-        T::Config::default()
-    } else {
-        serde_json::from_value(config.clone())
-            .map_err(|e| OpError::invalid_config(format!("Invalid config for {}: {e}", T::NAME)))?
-    };
+    let config = parse_config::<T>(config)?;
     let input = <T::In<'a> as Inputs<'a>>::extract(inputs)?;
     Ok(T::run(&config, input)?.into_values())
+}
+
+fn parse_config<T: Op>(config: &serde_json::Value) -> Result<T::Config, OpError> {
+    if config.is_null() {
+        return Ok(T::Config::default());
+    }
+    serde_json::from_value(config.clone())
+        .map_err(|e| OpError::invalid_config(format!("Invalid config for {}: {e}", T::NAME)))
+}
+
+fn take_over_erased<T: Op>(
+    config: &serde_json::Value,
+    input: Value,
+) -> Result<Result<Vec<Value>, OpError>, Value> {
+    // A bad config is reported by the ordinary run.
+    let Ok(config) = parse_config::<T>(config) else { return Err(input) };
+    T::take_over(&config, input).map(|result| result.map(|value| vec![value]))
 }
 
 fn detect_erased<'a, T: Op>(input: &'a Value) -> Option<Detection> {

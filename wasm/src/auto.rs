@@ -288,6 +288,48 @@ mod tests {
         assert_eq!(ops_of(&proposals[0]), ["jwt-decode"]);
     }
 
+    const LONG: &str = "The secret message is hidden in the last file that you will find \
+        here. Nobody has opened it for years, and the key was written on the back of a map.";
+
+    fn encode_text(text: &str, steps: &[(&str, serde_json::Value)]) -> Value {
+        steps.iter().fold(Value::Text(text.into()), |value, (op, config)| {
+            (ops::find(op).unwrap().run)(config, &[&value]).unwrap().remove(0)
+        })
+    }
+
+    #[test]
+    fn a_repeating_xor_key_is_recovered_under_base64() {
+        let input = encode_text(
+            LONG,
+            &[("xor", json!({ "key": "nohut" })), ("base64-standard-encode", json!({}))],
+        );
+        let best = &suggest(&input)[0];
+        assert_eq!(ops_of(best), ["base64-standard-decode", "xor", "utf8-decode"]);
+        assert_eq!(best.steps[1].config, json!({ "key": "nohut", "keyFormat": "text" }));
+        assert_eq!(replay(best, &input), Value::Text(LONG.into()));
+    }
+
+    #[test]
+    fn a_vigenere_key_is_recovered() {
+        let input = encode_text(LONG, &[("vigenere", json!({ "key": "nohut" }))]);
+        let best = &suggest(&input)[0];
+        assert_eq!(ops_of(best), ["vigenere"]);
+        assert_eq!(best.steps[0].config, json!({ "key": "NOHUT", "decrypt": true }));
+        assert_eq!(replay(best, &input), Value::Text(LONG.into()));
+    }
+
+    #[test]
+    fn text_in_another_language_is_a_destination_too() {
+        let turkish = "Gizli mesaj, burada bulacağın son dosyanın içinde saklı duruyor.";
+        for encoder in ["base64-standard-encode", "base16-encode", "url-encode"] {
+            let input = encode_text(turkish, &[(encoder, json!({}))]);
+            let proposals = suggest(&input);
+            let best = proposals.first().unwrap_or_else(|| panic!("no proposal for {encoder}"));
+            assert_eq!(replay(best, &input), Value::Text(turkish.into()), "{encoder}");
+        }
+        assert!(suggest(&Value::Text(turkish.into())).is_empty());
+    }
+
     #[test]
     fn large_input_is_sampled_and_the_steps_still_apply_to_all_of_it() {
         let long = PROSE.repeat(4000);

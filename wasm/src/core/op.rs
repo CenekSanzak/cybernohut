@@ -80,6 +80,7 @@ pub enum Tag {
     Encryption,
     #[serde(rename = "Data Format")]
     DataFormat,
+    Steganography,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]

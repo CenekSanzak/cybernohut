@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Download, Menu, Play, Upload, Share2, Trash2 } from "lucide-react";
+import { Download, Menu, Play, Redo2, Undo2, Upload, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   deserialize,
@@ -20,6 +20,9 @@ interface GraphControlsProps {
   onRun: () => void;
   /** Opens the operations drawer; the button only shows on narrow screens. */
   onShowOperations: () => void;
+  /** Absent when there is nothing to undo or redo. */
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 export const GraphControls: React.FC<GraphControlsProps> = ({
@@ -30,6 +33,8 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   onAutoCalculateChange,
   onRun,
   onShowOperations,
+  onUndo,
+  onRedo,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -103,7 +108,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   const handleClear = () => {
     if (
       window.confirm(
-        "Are you sure you want to clear the current graph? This action cannot be undone."
+        "Clear the current graph?"
       )
     ) {
       onClear();
@@ -171,6 +176,27 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
       >
         <Trash2 size={16} />
         Clear
+      </Button>
+
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onUndo}
+        disabled={!onUndo}
+        aria-label="Undo"
+        title="Undo (Ctrl+Z)"
+      >
+        <Undo2 size={16} />
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onRedo}
+        disabled={!onRedo}
+        aria-label="Redo"
+        title="Redo (Ctrl+Shift+Z)"
+      >
+        <Redo2 size={16} />
       </Button>
 
       <div className="ml-auto flex items-center gap-3">

@@ -3,15 +3,20 @@
 pub mod aes;
 pub mod analysis;
 pub mod base64;
+pub mod base64_custom;
 pub mod caesar;
+pub mod compare;
 pub mod compress;
 pub mod encoding;
+pub mod frequency;
 pub mod hash;
 pub mod json;
 pub mod key;
 pub mod mac;
 pub mod number_base;
 pub mod regex;
+pub mod rsa;
+pub mod stego;
 pub mod text;
 pub mod time;
 pub mod url;
@@ -28,11 +33,22 @@ use analysis::{DetectFileType, Entropy};
 use compress::{Gunzip, Gzip, RawDeflate, RawInflate, ZlibDeflate, ZlibInflate};
 use json::{JsonFormat, JsonFormatConfig, JsonMinify, JwtDecode};
 use mac::{Crc32, HmacConfig, HmacOp};
+use stego::{ImageMetadata, LsbConfig, LsbExtract, TrailingData};
 use time::{FromUnixTimestamp, TimestampConfig, ToUnixTimestamp};
 use caesar::{Atbash, CaesarCipher, CaesarConfig, Rot13, Vigenere, VigenereConfig};
-use hash::{Md5Hash, Sha1Hash, Sha256, Sha512};
+use base64_custom::{Base64CustomConfig, Base64CustomDecode, Base64CustomEncode};
+use compare::Compare;
+use frequency::{CharacterFrequency, DetectLanguage, FrequencyConfig};
+use rsa::{
+    BytesToInteger, IntegerConfig, IntegerToBytes, RsaAnalyze, RsaAnalyzeConfig, RsaDecrypt,
+    RsaDecryptConfig, RsaEncrypt, RsaEncryptConfig,
+};
+use hash::{HashConfig, Md5Hash, Sha1Hash, Sha256, Sha512};
 use number_base::{FromBinary, FromDecimal, FromOctal, ToBinary, ToDecimal, ToOctal};
-use self::regex::{RegexExtract, RegexExtractConfig, RegexReplace, RegexReplaceConfig};
+use self::regex::{
+    ExtractPattern, ExtractPatternConfig, RegexExtract, RegexExtractConfig, RegexReplace,
+    RegexReplaceConfig,
+};
 use url::{UrlDecode, UrlDecodeConfig, UrlEncode};
 use xor::{Xor, XorConfig};
 use encoding::{
@@ -40,9 +56,9 @@ use encoding::{
     HexEncodeConfig,
 };
 use text::{
-    ConcatenateConfig, ConcatenateText, CountWords, DelimiterConfig, JoinText, Lowercase,
-    RemoveSpaces, Reverse, SliceConfig, SliceText, SplitText, TextStats, Uppercase, Utf8Decode,
-    Utf8DecodeConfig,
+    CamelCase, ConcatenateConfig, ConcatenateText, CountWords, DelimiterConfig, JoinText,
+    KebabCase, Lowercase, RemoveSpaces, Reverse, SliceConfig, SliceText, SnakeCase, SplitText,
+    TextStats, TitleCase, Uppercase, Utf8Decode, Utf8DecodeConfig,
 };
 
 /// Registers operations and emits the TypeScript `OpConfigMap` that ties each id to its
@@ -78,9 +94,9 @@ ops! {
     "base64-standard-decode" => Base64StandardDecode: NoConfig,
     "base64-url-encode" => Base64UrlEncode: NoConfig,
     "base64-url-decode" => Base64UrlDecode: NoConfig,
-    "md5" => Md5Hash: NoConfig,
-    "sha1" => Sha1Hash: NoConfig,
-    "sha256" => Sha256: NoConfig,
+    "md5" => Md5Hash: HashConfig,
+    "sha1" => Sha1Hash: HashConfig,
+    "sha256" => Sha256: HashConfig,
     "caesar-cipher" => CaesarCipher: CaesarConfig,
     "rot13" => Rot13: NoConfig,
     "utf8-decode" => Utf8Decode: Utf8DecodeConfig,
@@ -102,7 +118,7 @@ ops! {
     "concatenate-text" => ConcatenateText: ConcatenateConfig,
     "regex-extract" => RegexExtract: RegexExtractConfig,
     "regex-replace" => RegexReplace: RegexReplaceConfig,
-    "sha512" => Sha512: NoConfig,
+    "sha512" => Sha512: HashConfig,
     "xor" => Xor: XorConfig,
     "atbash" => Atbash: NoConfig,
     "vigenere" => Vigenere: VigenereConfig,
@@ -131,6 +147,24 @@ ops! {
     "jwt-decode" => JwtDecode: NoConfig,
     "from-unix-timestamp" => FromUnixTimestamp: TimestampConfig,
     "to-unix-timestamp" => ToUnixTimestamp: TimestampConfig,
+    "base64-custom-encode" => Base64CustomEncode: Base64CustomConfig,
+    "base64-custom-decode" => Base64CustomDecode: Base64CustomConfig,
+    "compare" => Compare: NoConfig,
+    "to-title-case" => TitleCase: NoConfig,
+    "to-camel-case" => CamelCase: NoConfig,
+    "to-snake-case" => SnakeCase: NoConfig,
+    "to-kebab-case" => KebabCase: NoConfig,
+    "extract-pattern" => ExtractPattern: ExtractPatternConfig,
+    "character-frequency" => CharacterFrequency: FrequencyConfig,
+    "detect-language" => DetectLanguage: NoConfig,
+    "bytes-to-integer" => BytesToInteger: IntegerConfig,
+    "integer-to-bytes" => IntegerToBytes: IntegerConfig,
+    "rsa-encrypt" => RsaEncrypt: RsaEncryptConfig,
+    "rsa-decrypt" => RsaDecrypt: RsaDecryptConfig,
+    "rsa-analyze-modulus" => RsaAnalyze: RsaAnalyzeConfig,
+    "extract-trailing-data" => TrailingData: NoConfig,
+    "image-metadata" => ImageMetadata: NoConfig,
+    "lsb-extract" => LsbExtract: LsbConfig,
 }
 
 pub fn find(id: &str) -> Option<&'static OpEntry> {

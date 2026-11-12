@@ -37,6 +37,9 @@ aes = "0.8"
 cbc = { version = "0.1", features = ["alloc"] }
 ecb = { version = "0.1", features = ["alloc"] }
 ctr = "0.9"
+num-bigint = "0.4"
+num-integer = "0.1"
+num-traits = "0.2"
 aes-gcm = { version = "0.10", default-features = false, features = ["aes", "alloc"] }
 
 [dev-dependencies]

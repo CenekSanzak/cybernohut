@@ -13,7 +13,8 @@ import {
 } from "@/graph/persistence";
 import { useAutoMode } from "@/graph/useAutoMode";
 import { useEvaluation, useNodeOutput, wasReleased } from "@/graph/useEvaluation";
-import { createInitialState, graphReducer } from "@/state/graphReducer";
+import { createInitialState } from "@/state/graphReducer";
+import { createHistory, historyReducer, type History } from "@/state/history";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { GraphCanvas } from "./GraphCanvas";
 import { GraphControls } from "./GraphControls";
@@ -50,13 +51,22 @@ const sidebarItems: SidebarItem[] = [
 const SAVE_DELAY_MS = 500;
 
 /** A share link wins over the locally saved graph, which wins over an empty one. */
-function loadInitialState(): GraphSnapshot {
+function loadInitialState(): History {
   const loaded = loadFromUrl() ?? loadFromStorage();
-  return loaded && loaded.nodes.length > 0 ? loaded : createInitialState();
+  return createHistory(loaded && loaded.nodes.length > 0 ? loaded : createInitialState());
+}
+
+/** Text fields have their own undo, which the graph's must not take over. */
+function isEditingText(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLElement &&
+    (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))
+  );
 }
 
 const Workspace: React.FC = () => {
-  const [state, dispatch] = useReducer(graphReducer, undefined, loadInitialState);
+  const [history, dispatch] = useReducer(historyReducer, undefined, loadInitialState);
+  const state = history.present;
   const [autoCalculate, setAutoCalculate] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // The nodes whose full output the panel shows or auto mode reads.
@@ -81,9 +91,17 @@ const Workspace: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setSidebarOpen(false);
-      dispatch({ type: "SELECT", nodeId: "" });
+      if (event.key === "Escape") {
+        setSidebarOpen(false);
+        dispatch({ type: "SELECT", nodeId: "" });
+        return;
+      }
+      if (!(event.metaKey || event.ctrlKey) || isEditingText(event.target)) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" || key === "y") {
+        event.preventDefault();
+        dispatch({ type: key === "y" || event.shiftKey ? "REDO" : "UNDO" });
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
@@ -213,6 +231,8 @@ const Workspace: React.FC = () => {
               onAutoCalculateChange={setAutoCalculate}
               onRun={run}
               onShowOperations={() => setSidebarOpen(true)}
+              onUndo={history.past.length > 0 ? () => dispatch({ type: "UNDO" }) : undefined}
+              onRedo={history.future.length > 0 ? () => dispatch({ type: "REDO" }) : undefined}
             />
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
               <div className="min-h-0 min-w-0 flex-1 bg-gray-100">

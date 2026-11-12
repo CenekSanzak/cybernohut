@@ -47,6 +47,8 @@ fn decode_chunked(encoding: &Encoding, block: usize, input: &[u8]) -> Result<Vec
 #[serde(default)]
 pub struct HexEncodeConfig {
     pub uppercase: bool,
+    /// Put between bytes, as in `de ad be ef` or `de:ad:be:ef`. Empty for none.
+    pub separator: String,
 }
 
 pub struct Base16Encode;
@@ -63,12 +65,26 @@ impl Op for Base16Encode {
     type Out = String;
 
     fn params() -> Vec<ParamSpec> {
-        vec![ParamSpec::new("uppercase", "Uppercase", ParamKind::Bool)]
+        vec![
+            ParamSpec::new("uppercase", "Uppercase", ParamKind::Bool),
+            ParamSpec::new("separator", "Separator", ParamKind::Text),
+        ]
     }
 
     fn run(config: &HexEncodeConfig, input: &[u8]) -> Result<String, OpError> {
         let case = if config.uppercase { AsciiCase::Upper } else { AsciiCase::Lower };
-        Ok(hex_simd::encode_to_string(input, case))
+        let digits = hex_simd::encode_to_string(input, case);
+        if config.separator.is_empty() {
+            return Ok(digits);
+        }
+        let mut output = String::with_capacity(digits.len() / 2 * (2 + config.separator.len()));
+        for (index, pair) in digits.as_bytes().chunks(2).enumerate() {
+            if index > 0 {
+                output.push_str(&config.separator);
+            }
+            output.push_str(std::str::from_utf8(pair).expect("hex digits are ASCII"));
+        }
+        Ok(output)
     }
 }
 
@@ -94,6 +110,15 @@ impl Op for Base16Decode {
     }
 
     fn run(_: &NoConfig, input: &str) -> Result<Vec<u8>, OpError> {
+        // Hex is often written `de:ad:be:ef`, `de-ad` or `de,ad`.
+        if input.bytes().any(|byte| matches!(byte, b':' | b'-' | b',')) {
+            let digits: Vec<u8> = input
+                .bytes()
+                .filter(|byte| !byte.is_ascii_whitespace() && !matches!(byte, b':' | b'-' | b','))
+                .collect();
+            return hex_simd::decode_to_vec(digits)
+                .map_err(|_| OpError::invalid_input("Not valid hexadecimal"));
+        }
         hex_simd::decode_to_vec(compact(input).as_bytes())
             .map_err(|_| OpError::invalid_input("Not valid hexadecimal"))
     }
@@ -191,8 +216,8 @@ mod tests {
     #[test]
     fn hex_encodes_in_either_case_and_decodes_both() {
         let bytes = [0xde, 0xad, 0xbe, 0xef];
-        let lower = Base16Encode::run(&HexEncodeConfig { uppercase: false }, &bytes).unwrap();
-        let upper = Base16Encode::run(&HexEncodeConfig { uppercase: true }, &bytes).unwrap();
+        let lower = Base16Encode::run(&HexEncodeConfig { uppercase: false, separator: String::new() }, &bytes).unwrap();
+        let upper = Base16Encode::run(&HexEncodeConfig { uppercase: true, separator: String::new() }, &bytes).unwrap();
         assert_eq!((lower.as_str(), upper.as_str()), ("deadbeef", "DEADBEEF"));
         assert_eq!(Base16Decode::run(&NoConfig {}, &lower).unwrap(), bytes);
         assert_eq!(Base16Decode::run(&NoConfig {}, "DE AD\nBE EF").unwrap(), bytes);
@@ -234,5 +259,16 @@ mod tests {
     fn invalid_input_is_an_error() {
         assert_eq!(Base16Decode::run(&NoConfig {}, "xyz").unwrap_err().code, ErrorCode::InvalidInput);
         assert_eq!(Base32Decode::run(&NoConfig {}, "!!!").unwrap_err().code, ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn hex_can_be_written_and_read_with_separators() {
+        let spaced = HexEncodeConfig { uppercase: false, separator: " ".into() };
+        assert_eq!(Base16Encode::run(&spaced, &[0xde, 0xad, 0xbe]).unwrap(), "de ad be");
+        let colons = HexEncodeConfig { uppercase: true, separator: ":".into() };
+        assert_eq!(Base16Encode::run(&colons, &[0xde, 0xad]).unwrap(), "DE:AD");
+        for written in ["de ad be", "DE:AD:BE", "de-ad-be", "de,ad,be"] {
+            assert_eq!(Base16Decode::run(&NoConfig {}, written).unwrap(), [0xde, 0xad, 0xbe]);
+        }
     }
 }

@@ -96,6 +96,90 @@ text_op!(
     |s| s.chars().filter(|c| !c.is_whitespace() || *c == '\n').collect()
 );
 
+/// The words of an identifier or phrase: split on anything that is not a letter or
+/// digit, and where a lowercase letter is followed by an uppercase one.
+fn words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut previous_lower = false;
+    for c in text.chars() {
+        if !c.is_alphanumeric() || (c.is_uppercase() && previous_lower) {
+            if !current.is_empty() {
+                words.push(std::mem::take(&mut current));
+            }
+        }
+        if c.is_alphanumeric() {
+            current.push(c);
+        }
+        previous_lower = c.is_lowercase() || c.is_numeric();
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    words
+}
+
+fn capitalize(word: &str) -> String {
+    let mut chars = word.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars.flat_map(char::to_lowercase)).collect(),
+        None => String::new(),
+    }
+}
+
+/// Applies a per-line conversion, so a list of names converts name by name.
+fn each_line(text: &str, convert: impl Fn(&str) -> String) -> String {
+    text.split('\n').map(convert).collect::<Vec<_>>().join("\n")
+}
+
+text_op!(
+    TitleCase,
+    "to-title-case",
+    "To Title Case",
+    "Capitalizes the first letter of every word",
+    |s| {
+        let mut output = String::with_capacity(s.len());
+        let mut at_start = true;
+        for c in s.chars() {
+            if at_start {
+                output.extend(c.to_uppercase());
+            } else {
+                output.extend(c.to_lowercase());
+            }
+            at_start = !c.is_alphanumeric() && c != '\'';
+        }
+        output
+    }
+);
+text_op!(
+    CamelCase,
+    "to-camel-case",
+    "To camelCase",
+    "Joins the words of each line as camelCase",
+    |s| each_line(s, |line| {
+        let words = words(line);
+        words
+            .iter()
+            .enumerate()
+            .map(|(index, word)| if index == 0 { word.to_lowercase() } else { capitalize(word) })
+            .collect()
+    })
+);
+text_op!(
+    SnakeCase,
+    "to-snake-case",
+    "To snake_case",
+    "Joins the words of each line as snake_case",
+    |s| each_line(s, |line| words(line).join("_").to_lowercase())
+);
+text_op!(
+    KebabCase,
+    "to-kebab-case",
+    "To kebab-case",
+    "Joins the words of each line as kebab-case",
+    |s| each_line(s, |line| words(line).join("-").to_lowercase())
+);
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
 #[serde(default)]
 pub struct SliceConfig {
@@ -337,6 +421,19 @@ mod tests {
     fn empty_delimiter_is_rejected() {
         let config = DelimiterConfig { delimiter: String::new() };
         assert_eq!(SplitText::run(&config, "abc").unwrap_err().code, ErrorCode::InvalidConfig);
+    }
+
+    #[test]
+    fn case_styles_split_words_the_same_way() {
+        let run = |op: fn(&NoConfig, &str) -> Result<String, OpError>, text: &str| op(&NoConfig {}, text).unwrap();
+        for input in ["parse HTTP response", "parseHttpResponse", "parse_http_response", "parse-http-response"] {
+            assert_eq!(run(CamelCase::run, input), "parseHttpResponse", "{input}");
+            assert_eq!(run(SnakeCase::run, input), "parse_http_response", "{input}");
+            assert_eq!(run(KebabCase::run, input), "parse-http-response", "{input}");
+        }
+        assert_eq!(run(TitleCase::run, "the quick BROWN fox's den"), "The Quick Brown Fox's Den");
+        assert_eq!(run(SnakeCase::run, "first name\nlastName"), "first_name\nlast_name");
+        assert_eq!(run(CamelCase::run, "ığdır şehri"), "ığdırŞehri");
     }
 
     #[test]

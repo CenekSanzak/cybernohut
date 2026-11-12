@@ -31,24 +31,31 @@ A visual toolkit for transforming data: encodings, hashes, ciphers and compressi
   raw bytes into the graph without going through text, and any output can be downloaded. File content is not saved with the
   graph.
 - **Shareable.** A graph is plain data: it is saved locally, exported as JSON, or packed
-  into a link.
+  into a link. Every change can be undone and redone.
 
 ### Operations
 
-57 operations:
+75 operations:
 
-- **Encoding:** Base64 (standard and URL-safe), Base32, Base85, hexadecimal, URL
-  percent-encoding; bytes as binary, octal or decimal numbers
+- **Encoding:** Base64 (standard, URL-safe and with a custom alphabet), Base32, Base85,
+  hexadecimal, URL percent-encoding; bytes as binary, octal or decimal numbers, or as one
+  big integer in either byte order
 - **Compression:** gzip, zlib and raw DEFLATE, both ways
-- **Encryption:** AES in CBC, CTR, GCM and ECB with 128, 192 or 256-bit keys; XOR with a
+- **Encryption:** AES in CBC, CTR, GCM and ECB with 128, 192 or 256-bit keys; textbook
+  RSA, including factoring a modulus with close primes or a small factor; XOR with a
   repeating key
-- **Hashing:** MD5, SHA-1, SHA-256, SHA-512, HMAC, CRC32
+- **Hashing:** MD5, SHA-1, SHA-256, SHA-512 (as hex or Base64), HMAC, CRC32
 - **Classic ciphers:** Caesar, ROT13, Atbash, Vigenère
+- **Steganography:** LSB extraction from PNG pixels, data hidden after the end of a PNG
+  or JPEG, text and comments in image metadata
 - **Data formats:** JSON format and minify, JWT decode, Unix timestamps to and from
   ISO 8601
-- **Text:** regex extract and replace, reverse, case conversion, slice, split, join,
-  concatenate, word count, statistics, UTF-8 decoding
-- **Analysis:** file type detection from signature bytes, Shannon entropy
+- **Text:** regex extract and replace, ready-made patterns (flags, URLs, emails, IP
+  addresses, hashes), reverse, upper, lower, title, camel, snake and kebab case, slice,
+  split, join, concatenate, word count, statistics, UTF-8 decoding
+- **Analysis:** file type, media type and image size from signature bytes, Shannon
+  entropy, character frequency with the index of coincidence, language detection,
+  comparing two values
 
 Any single-input operation that produces text can also be run line by line.
 

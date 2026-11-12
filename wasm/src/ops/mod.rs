@@ -1,10 +1,15 @@
 //! Every operation, and the one list that registers them.
 
+pub mod analysis;
 pub mod base64;
 pub mod caesar;
 pub mod encoding;
 pub mod hash;
+pub mod number_base;
+pub mod regex;
 pub mod text;
+pub mod url;
+pub mod xor;
 
 use std::sync::OnceLock;
 
@@ -12,8 +17,13 @@ use wasm_bindgen::prelude::*;
 
 use crate::core::{entry, NoConfig, Op, OpEntry};
 use base64::{Base64StandardDecode, Base64StandardEncode, Base64UrlDecode, Base64UrlEncode};
-use caesar::{CaesarCipher, CaesarConfig, Rot13};
-use hash::{Md5Hash, Sha1Hash, Sha256};
+use analysis::{DetectFileType, Entropy};
+use caesar::{Atbash, CaesarCipher, CaesarConfig, Rot13, Vigenere, VigenereConfig};
+use hash::{Md5Hash, Sha1Hash, Sha256, Sha512};
+use number_base::{FromBinary, FromDecimal, FromOctal, ToBinary, ToDecimal, ToOctal};
+use self::regex::{RegexExtract, RegexExtractConfig, RegexReplace, RegexReplaceConfig};
+use url::{UrlDecode, UrlDecodeConfig, UrlEncode};
+use xor::{Xor, XorConfig};
 use encoding::{
     Base16Decode, Base16Encode, Base32Decode, Base32Encode, Base85Decode, Base85Encode,
     HexEncodeConfig,
@@ -79,6 +89,22 @@ ops! {
     "split-text" => SplitText: DelimiterConfig,
     "join-text" => JoinText: DelimiterConfig,
     "concatenate-text" => ConcatenateText: ConcatenateConfig,
+    "regex-extract" => RegexExtract: RegexExtractConfig,
+    "regex-replace" => RegexReplace: RegexReplaceConfig,
+    "sha512" => Sha512: NoConfig,
+    "xor" => Xor: XorConfig,
+    "atbash" => Atbash: NoConfig,
+    "vigenere" => Vigenere: VigenereConfig,
+    "url-encode" => UrlEncode: NoConfig,
+    "url-decode" => UrlDecode: UrlDecodeConfig,
+    "to-binary" => ToBinary: NoConfig,
+    "from-binary" => FromBinary: NoConfig,
+    "to-octal" => ToOctal: NoConfig,
+    "from-octal" => FromOctal: NoConfig,
+    "to-decimal" => ToDecimal: NoConfig,
+    "from-decimal" => FromDecimal: NoConfig,
+    "detect-file-type" => DetectFileType: NoConfig,
+    "entropy" => Entropy: NoConfig,
 }
 
 pub fn find(id: &str) -> Option<&'static OpEntry> {

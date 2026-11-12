@@ -9,6 +9,7 @@
 - Save, export, import and share links in one validated format
 - File source nodes for binary input, and downloading any output
 - A benchmark page that compares the engine with browser-native code
+- 42 operations, including XOR, URL encoding, regex, number bases and file type detection
 
 ## Next
 
@@ -16,8 +17,8 @@
    bytes as UTF-8 text, copy it today. Sharing one buffer would remove that cost, which
    shows up in the Base64 decode benchmark. SHA-256 stays behind Web Crypto, which has
    CPU instructions WebAssembly cannot use.
-2. **More operations.** XOR, URL encoding, regex extract/replace, number-base
-   conversions, magic-byte detection.
+2. **More operations.** AES and RSA, compression (gzip, zlib), JSON and timestamp
+   helpers, CRC checksums, HMAC.
 3. **Auto mode.** A search over operations that proposes decoding steps for unknown
    input. Its result is a graph fragment, not a value: each proposed step shows why it
    was chosen and becomes an ordinary node once accepted. Needs a per-operation

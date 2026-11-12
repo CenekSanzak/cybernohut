@@ -1,6 +1,6 @@
 use md5::Md5;
 use sha1::Sha1;
-use sha2::{Digest, Sha256 as Sha256Hasher};
+use sha2::{Digest, Sha256 as Sha256Hasher, Sha512 as Sha512Hasher};
 
 use crate::core::{NoConfig, Op, OpError, Tag};
 
@@ -34,6 +34,7 @@ macro_rules! hash_op {
 hash_op!(Md5Hash, Md5, "md5", "MD5", "https://en.wikipedia.org/wiki/MD5");
 hash_op!(Sha1Hash, Sha1, "sha1", "SHA1", "https://en.wikipedia.org/wiki/SHA-1");
 hash_op!(Sha256, Sha256Hasher, "sha256", "SHA256", "https://en.wikipedia.org/wiki/SHA-2");
+hash_op!(Sha512, Sha512Hasher, "sha512", "SHA512", "https://en.wikipedia.org/wiki/SHA-2");
 
 #[cfg(test)]
 mod tests {
@@ -49,6 +50,15 @@ mod tests {
         assert_eq!(
             Sha256::run(&NoConfig {}, b"abc").unwrap(),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    #[test]
+    fn sha512_known_vector() {
+        assert_eq!(
+            Sha512::run(&NoConfig {}, b"abc").unwrap(),
+            "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a\
+             2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
         );
     }
 

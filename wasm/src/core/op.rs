@@ -43,6 +43,7 @@ pub enum Tag {
     Io,
     #[serde(rename = "Substitution Cipher")]
     SubstitutionCipher,
+    Analysis,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Tsify)]

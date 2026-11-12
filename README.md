@@ -25,10 +25,15 @@ A visual toolkit for transforming data: encodings, hashes and classic ciphers, w
 
 ### Operations
 
-Base64 (standard and URL-safe), Base32, Base85 and hexadecimal encode/decode; MD5, SHA-1
-and SHA-256; Caesar cipher and ROT13; reverse, case conversion, slice, split, join,
-concatenate, word count and text statistics. Any single-input text operation can also be
-run line by line.
+- **Encoding:** Base64 (standard and URL-safe), Base32, Base85, hexadecimal, URL
+  percent-encoding; bytes as binary, octal or decimal numbers
+- **Hashing:** MD5, SHA-1, SHA-256, SHA-512
+- **Ciphers:** XOR with a repeating key, Caesar, ROT13, Atbash, Vigenère
+- **Text:** regex extract and replace, reverse, case conversion, slice, split, join,
+  concatenate, word count, statistics, UTF-8 decoding
+- **Analysis:** file type detection from signature bytes, Shannon entropy
+
+Any single-input operation that produces text can also be run line by line.
 
 ## How it fits together
 
@@ -90,7 +95,7 @@ SHA-256 in Web Crypto uses dedicated CPU instructions that WebAssembly cannot re
 and it dominates the chained pipeline. Base64 and hex use WebAssembly SIMD. Beyond
 speed, the Rust core gives one typed definition per operation, correct handling of
 binary data, an engine that runs off the main thread and survives running out of
-memory, and operations the browser does not have at all (MD5, Base32, Base85).
+memory, and operations the browser does not have at all (MD5, Base32, Base85, XOR, the classic ciphers).
 
 ## Getting Started
 

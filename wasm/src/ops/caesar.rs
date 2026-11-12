@@ -82,6 +82,90 @@ impl Op for Rot13 {
     }
 }
 
+/// Maps A to Z, B to Y and so on. Applying it twice undoes it.
+pub struct Atbash;
+
+impl Op for Atbash {
+    const ID: &'static str = "atbash";
+    const NAME: &'static str = "Atbash";
+    const DESCRIPTION: &'static str = "Mirrors the alphabet: A becomes Z, B becomes Y";
+    const LINK: Option<&'static str> = Some("https://en.wikipedia.org/wiki/Atbash");
+    const TAGS: &'static [Tag] = &[Tag::Text, Tag::SubstitutionCipher];
+
+    type Config = NoConfig;
+    type In<'a> = &'a str;
+    type Out = String;
+
+    fn run(_: &NoConfig, input: &str) -> Result<String, OpError> {
+        let mut bytes = input.as_bytes().to_vec();
+        for byte in &mut bytes {
+            *byte = match *byte {
+                b'a'..=b'z' => b'z' - (*byte - b'a'),
+                b'A'..=b'Z' => b'Z' - (*byte - b'A'),
+                other => other,
+            };
+        }
+        Ok(String::from_utf8(bytes).expect("mirroring ASCII letters keeps the text valid UTF-8"))
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Tsify)]
+#[serde(default)]
+pub struct VigenereConfig {
+    /// Only its letters are used.
+    pub key: String,
+    pub decrypt: bool,
+}
+
+pub struct Vigenere;
+
+impl Op for Vigenere {
+    const ID: &'static str = "vigenere";
+    const NAME: &'static str = "Vigenère Cipher";
+    const DESCRIPTION: &'static str =
+        "Shifts each letter by the matching letter of a repeating key";
+    const LINK: Option<&'static str> = Some("https://en.wikipedia.org/wiki/Vigen%C3%A8re_cipher");
+    const TAGS: &'static [Tag] = &[Tag::Text, Tag::SubstitutionCipher];
+
+    type Config = VigenereConfig;
+    type In<'a> = &'a str;
+    type Out = String;
+
+    fn params() -> Vec<ParamSpec> {
+        vec![
+            ParamSpec::new("key", "Key", ParamKind::Text),
+            ParamSpec::new("decrypt", "Decrypt", ParamKind::Bool),
+        ]
+    }
+
+    fn run(config: &VigenereConfig, input: &str) -> Result<String, OpError> {
+        let shifts: Vec<u8> = config
+            .key
+            .bytes()
+            .filter(u8::is_ascii_alphabetic)
+            .map(|letter| letter.to_ascii_lowercase() - b'a')
+            .collect();
+        if shifts.is_empty() {
+            return Err(OpError::invalid_config("Enter a key with at least one letter"));
+        }
+        let mut bytes = input.as_bytes().to_vec();
+        // The key advances only on letters, so punctuation does not shift the alignment.
+        let mut position = 0;
+        for byte in &mut bytes {
+            let base = match *byte {
+                b'a'..=b'z' => b'a',
+                b'A'..=b'Z' => b'A',
+                _ => continue,
+            };
+            let shift = shifts[position % shifts.len()];
+            let shift = if config.decrypt { 26 - shift } else { shift };
+            *byte = (*byte - base + shift) % 26 + base;
+            position += 1;
+        }
+        Ok(String::from_utf8(bytes).expect("shifting ASCII letters keeps the text valid UTF-8"))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,5 +203,32 @@ mod tests {
     fn known_part_narrows_the_list() {
         let output = CaesarCipher::run(&config(0, "hello"), "Uryyb").unwrap();
         assert_eq!(output, "Shift 13: Hello");
+    }
+
+    #[test]
+    fn atbash_mirrors_and_undoes_itself() {
+        let once = Atbash::run(&NoConfig {}, "Hello, Nohut!").unwrap();
+        assert_eq!(once, "Svool, Mlsfg!");
+        assert_eq!(Atbash::run(&NoConfig {}, &once).unwrap(), "Hello, Nohut!");
+    }
+
+    #[test]
+    fn vigenere_matches_the_textbook_example_and_decrypts() {
+        let encrypt = VigenereConfig { key: "LEMON".into(), decrypt: false };
+        let decrypt = VigenereConfig { key: "LEMON".into(), decrypt: true };
+        assert_eq!(Vigenere::run(&encrypt, "ATTACKATDAWN").unwrap(), "LXFOPVEFRNHR");
+        assert_eq!(Vigenere::run(&decrypt, "LXFOPVEFRNHR").unwrap(), "ATTACKATDAWN");
+    }
+
+    #[test]
+    fn vigenere_keeps_case_and_skips_punctuation_without_using_up_the_key() {
+        let config = VigenereConfig { key: "b-c".into(), decrypt: false };
+        assert_eq!(Vigenere::run(&config, "a, A a!").unwrap(), "b, C b!");
+    }
+
+    #[test]
+    fn vigenere_needs_a_key_with_letters() {
+        let config = VigenereConfig { key: "123".into(), decrypt: false };
+        assert!(Vigenere::run(&config, "abc").is_err());
     }
 }

@@ -79,9 +79,14 @@ export function createInputNode(
   return { id, type: "custom", position, data: { kind: "input", text: "" } };
 }
 
-export function createFileNode(position: XYPosition): GraphNode {
+/** An id for a file node created outside the reducer, so its bytes can follow it. */
+export function newFileNodeId(): string {
+  return shortId("file");
+}
+
+export function createFileNode(position: XYPosition, id = shortId("file")): GraphNode {
   return {
-    id: shortId("file"),
+    id,
     type: "custom",
     position,
     data: { kind: "file", name: "", size: 0 },

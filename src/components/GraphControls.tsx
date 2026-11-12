@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Download, Play, Upload, Share2, Trash2 } from "lucide-react";
+import { Download, Menu, Play, Upload, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   deserialize,
@@ -18,6 +18,8 @@ interface GraphControlsProps {
   onAutoCalculateChange: (enabled: boolean) => void;
   /** Runs the graph once; used when auto-calculate is off. */
   onRun: () => void;
+  /** Opens the operations drawer; the button only shows on narrow screens. */
+  onShowOperations: () => void;
 }
 
 export const GraphControls: React.FC<GraphControlsProps> = ({
@@ -27,6 +29,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   autoCalculate,
   onAutoCalculateChange,
   onRun,
+  onShowOperations,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -110,6 +113,17 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
 
   return (
     <div className="flex flex-wrap items-center gap-2 border-b bg-white p-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={onShowOperations}
+        className="flex items-center gap-2 md:hidden"
+        aria-controls="operations"
+      >
+        <Menu size={16} />
+        Operations
+      </Button>
+
       <Button
         variant="outline"
         size="sm"

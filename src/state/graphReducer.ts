@@ -25,7 +25,7 @@ export type GraphState = GraphSnapshot;
 
 export type GraphAction =
   | { type: "ADD_INPUT" }
-  | { type: "ADD_FILE" }
+  | { type: "ADD_FILE"; nodeId?: string; position?: XYPosition }
   | { type: "SET_FILE"; nodeId: string; name: string; size: number }
   | { type: "ADD_OP"; opId: OpId }
   | { type: "ADD_CHAIN"; anchorId: string; steps: ChainStep[] }
@@ -209,6 +209,15 @@ function repairSelection(state: GraphState): GraphState {
   return { ...state, selectedInputId, selectedNodeId };
 }
 
+/** An input becomes the one being edited; any other node the one whose output shows. */
+function select(state: GraphState, nodeId: string): GraphState {
+  const node = state.nodes.find((n) => n.id === nodeId);
+  if (!node) return { ...state, selectedNodeId: "" };
+  return node.data.kind === "input"
+    ? { ...state, selectedInputId: node.id }
+    : { ...state, selectedNodeId: node.id };
+}
+
 export function graphReducer(state: GraphState, action: GraphAction): GraphState {
   switch (action.type) {
     case "ADD_INPUT": {
@@ -217,7 +226,7 @@ export function graphReducer(state: GraphState, action: GraphAction): GraphState
     }
 
     case "ADD_FILE": {
-      const node = createFileNode(nextSourcePosition(state));
+      const node = createFileNode(action.position ?? nextSourcePosition(state), action.nodeId);
       return { ...state, nodes: [...state.nodes, node], selectedNodeId: node.id };
     }
 
@@ -252,19 +261,15 @@ export function graphReducer(state: GraphState, action: GraphAction): GraphState
         data.kind === "op" ? { ...data, perLine: action.perLine } : data
       );
 
-    case "SELECT": {
-      const node = state.nodes.find((n) => n.id === action.nodeId);
-      if (!node) return { ...state, selectedNodeId: "" };
-      return node.data.kind === "input"
-        ? { ...state, selectedInputId: node.id }
-        : { ...state, selectedNodeId: node.id };
-    }
+    case "SELECT":
+      return select(state, action.nodeId);
 
-    case "APPLY_NODE_CHANGES":
-      return repairSelection({
-        ...state,
-        nodes: applyNodeChanges(action.changes, state.nodes),
-      });
+    case "APPLY_NODE_CHANGES": {
+      const next = { ...state, nodes: applyNodeChanges(action.changes, state.nodes) };
+      // Selecting a node from the keyboard arrives here and nowhere else.
+      const picked = action.changes.find((change) => change.type === "select" && change.selected);
+      return repairSelection(picked?.type === "select" ? select(next, picked.id) : next);
+    }
 
     case "APPLY_EDGE_CHANGES":
       return { ...state, edges: applyEdgeChanges(action.changes, state.edges) };

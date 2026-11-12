@@ -58,6 +58,7 @@ function loadInitialState(): GraphSnapshot {
 const Workspace: React.FC = () => {
   const [state, dispatch] = useReducer(graphReducer, undefined, loadInitialState);
   const [autoCalculate, setAutoCalculate] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { evaluation, run } = useEvaluation(state.nodes, state.edges, autoCalculate);
   const { reports } = evaluation;
 
@@ -75,7 +76,9 @@ const Workspace: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") dispatch({ type: "SELECT", nodeId: "" });
+      if (event.key !== "Escape") return;
+      setSidebarOpen(false);
+      dispatch({ type: "SELECT", nodeId: "" });
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
@@ -84,6 +87,7 @@ const Workspace: React.FC = () => {
   const handleOperationSelect = useCallback((item: SidebarItem) => {
     if (isOpId(item.id)) dispatch({ type: "ADD_OP", opId: item.id });
     else dispatch({ type: item.id === FILE_ITEM.id ? "ADD_FILE" : "ADD_INPUT" });
+    setSidebarOpen(false);
   }, []);
 
   const handleClear = useCallback(() => {
@@ -125,7 +129,9 @@ const Workspace: React.FC = () => {
           : text;
       }
       case "error":
-        return `Error: ${report.error.message}`;
+        return report.error.code === "invalid_config"
+          ? `This step is not set up yet: ${report.error.message}`
+          : `Error: ${report.error.message}`;
       case "waiting":
         return "This step has an input that is not connected yet.";
       case "blocked":
@@ -171,8 +177,19 @@ const Workspace: React.FC = () => {
       <ReportsContext.Provider value={reports}>
         <div className="flex h-screen overflow-hidden">
           <ErrorBoundary>
-            <Sidebar operations={sidebarItems} onOperationSelect={handleOperationSelect} />
+            <Sidebar
+              operations={sidebarItems}
+              onOperationSelect={handleOperationSelect}
+              open={sidebarOpen}
+            />
           </ErrorBoundary>
+          {sidebarOpen && (
+            <div
+              className="fixed inset-0 z-30 bg-black/30 md:hidden"
+              onClick={() => setSidebarOpen(false)}
+              aria-hidden="true"
+            />
+          )}
           <div className="flex min-w-0 flex-1 flex-col">
             <GraphControls
               state={state}
@@ -181,6 +198,7 @@ const Workspace: React.FC = () => {
               autoCalculate={autoCalculate}
               onAutoCalculateChange={setAutoCalculate}
               onRun={run}
+              onShowOperations={() => setSidebarOpen(true)}
             />
             <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
               <div className="min-h-0 min-w-0 flex-1 bg-gray-100">

@@ -21,11 +21,56 @@ export interface SidebarItem {
 interface SidebarProps {
   operations: SidebarItem[];
   onOperationSelect: (operation: SidebarItem) => void;
+  /** On narrow screens the sidebar is a drawer; this says whether it is showing. */
+  open: boolean;
 }
 
 const ALL = "All";
 
-const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
+function OperationButton({
+  operation,
+  onSelect,
+}: {
+  operation: SidebarItem;
+  onSelect: (operation: SidebarItem) => void;
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={200}>
+        <TooltipTrigger asChild>
+          <Button
+            className="w-full justify-start text-sm"
+            variant="ghost"
+            onClick={() => onSelect(operation)}
+            aria-label={`Add ${operation.name} operation`}
+          >
+            {operation.name}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent
+          className="max-w-sm rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-zinc-50 shadow-lg"
+          sideOffset={5}
+          side="right"
+        >
+          <p className="mb-2 text-sm">{operation.description}</p>
+          {operation.link && (
+            <a
+              href={operation.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-400 underline hover:text-blue-300"
+              onClick={(e) => e.stopPropagation()}
+            >
+              Learn more
+            </a>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect, open }) => {
   const [expandedTags, setExpandedTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -64,7 +109,10 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
 
   return (
     <nav
-      className="h-full w-60 shrink-0 overflow-y-auto border-r bg-white p-4"
+      id="operations"
+      className={`h-full w-60 shrink-0 overflow-y-auto border-r bg-white p-4 ${
+        open ? "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:shadow-xl" : "max-md:hidden"
+      }`}
       aria-label="Operations"
     >
       <h1 className="text-lg font-bold">Cyber Nohut</h1>
@@ -91,40 +139,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
           </h3>
           <div className="space-y-1">
             {searchResults.map((op) => (
-              <TooltipProvider key={op.id}>
-                <Tooltip delayDuration={200}>
-                  <TooltipTrigger asChild>
-                    <Button
-                      className="w-full justify-start text-sm"
-                      variant="ghost"
-                      onClick={() => onOperationSelect(op)}
-                      aria-label={`Add ${op.name} operation`}
-                    >
-                      {op.name}
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    className="bg-zinc-900 text-zinc-50 px-3 py-2 rounded-md shadow-lg border border-zinc-800 max-w-sm"
-                    sideOffset={5}
-                    side="right"
-                  >
-                    <p className="text-sm mb-2">
-                      {op.description || "No description available"}
-                    </p>
-                    {op.link && (
-                      <a
-                        href={op.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-400 hover:text-blue-300 underline"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        Learn more
-                      </a>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <OperationButton key={op.id} operation={op} onSelect={onOperationSelect} />
             ))}
           </div>
         </div>
@@ -150,40 +165,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
           {expandedTags.includes(tag) && (
             <div className="ml-3 mt-1 space-y-0.5">
               {ops.map((op) => (
-                <TooltipProvider key={op.id}>
-                  <Tooltip delayDuration={200}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        className="w-full justify-start text-sm"
-                        variant="ghost"
-                        onClick={() => onOperationSelect(op)}
-                        aria-label={`Add ${op.name} operation`}
-                      >
-                        {op.name}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      className="bg-zinc-900 text-zinc-50 px-3 py-2 rounded-md shadow-lg border border-zinc-800 max-w-sm"
-                      sideOffset={5}
-                      side="right"
-                    >
-                      <p className="text-sm mb-2">
-                        {op.description || "No description available"}
-                      </p>
-                      {op.link && (
-                        <a
-                          href={op.link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-400 hover:text-blue-300 underline"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Learn more
-                        </a>
-                      )}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <OperationButton key={op.id} operation={op} onSelect={onOperationSelect} />
               ))}
             </div>
           )}

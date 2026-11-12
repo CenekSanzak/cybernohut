@@ -1,9 +1,7 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Node } from "@xyflow/react";
-import { Operation, OperationTags } from "@/operations/types";
 import {
   Tooltip,
   TooltipContent,
@@ -14,16 +12,15 @@ import {
 interface InputOutputProps {
   input: string;
   output: string;
-  onInputChange: (value: string, nodeId: string) => void;
+  onInputChange: (value: string) => void;
   calculate: () => void;
   autoCalculate: boolean;
   onAutoCalculateChange: (checked: boolean) => void;
   selectedNodeId?: string;
   selectedNodeTitle?: string;
-  nodes: Node[];
+  inputs: { id: string; label: string }[];
   selectedInputId?: string;
   onInputTabSelect: (nodeId: string) => void;
-  isCalculating?: boolean;
 }
 
 const InputOutput = React.memo<InputOutputProps>(
@@ -36,26 +33,17 @@ const InputOutput = React.memo<InputOutputProps>(
     onAutoCalculateChange,
     selectedNodeId,
     selectedNodeTitle,
-    nodes,
+    inputs,
     selectedInputId,
     onInputTabSelect,
-    isCalculating = false,
   }) => {
-    const inputNodes = useMemo(
-      () =>
-        nodes.filter((node) =>
-          (node.data as Operation).tags.includes(OperationTags.IO)
-        ),
-      [nodes]
-    );
-
     return (
       <div className="flex flex-col h-full">
         <div className="h-1/2 p-4">
           <h3 className="text-lg font-semibold mb-2">Input</h3>
-          {inputNodes.length > 0 && (
+          {inputs.length > 1 && (
             <div className="flex gap-2 mb-2">
-              {inputNodes.map((node) => (
+              {inputs.map((node) => (
                 <button
                   key={node.id}
                   onClick={() => onInputTabSelect(node.id)}
@@ -65,16 +53,15 @@ const InputOutput = React.memo<InputOutputProps>(
                       : "bg-gray-100 hover:bg-gray-200"
                   }`}
                 >
-                  {(node.data as Operation).name}
+                  {node.label}
                 </button>
               ))}
             </div>
           )}
           <Textarea
             value={input}
-            onChange={(e) =>
-              onInputChange(e.target.value, selectedInputId || "input-node")
-            }
+            onChange={(e) => onInputChange(e.target.value)}
+            disabled={!selectedInputId}
             className="w-full h-[calc(100%-4rem)]"
             placeholder="Enter your input here..."
             aria-label="Input text"
@@ -83,9 +70,6 @@ const InputOutput = React.memo<InputOutputProps>(
         <div className="h-1/2 p-4 bg-gray-50">
           <h3 className="text-lg font-semibold mb-2 flex items-center gap-4">
             Output{" "}
-            {isCalculating && (
-              <span className="text-sm text-blue-600">⏳ Calculating...</span>
-            )}
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2">
                 <TooltipProvider>

@@ -32,6 +32,16 @@ impl ValueType {
     pub fn accepts(self, from: ValueType) -> bool {
         self == from || (self == ValueType::Bytes && from == ValueType::Text)
     }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            ValueType::Bytes => "bytes",
+            ValueType::Text => "text",
+            ValueType::Number => "a number",
+            ValueType::TextList => "a list of texts",
+            ValueType::NumberList => "a list of numbers",
+        }
+    }
 }
 
 impl Value {
@@ -157,15 +167,23 @@ impl<'a, A: FromValue<'a>> Inputs<'a> for A {
     }
 }
 
-impl<'a, A: FromValue<'a>, B: FromValue<'a>> Inputs<'a> for (A, B) {
-    fn types() -> Vec<ValueType> {
-        vec![A::TYPE, B::TYPE]
-    }
-    fn extract(values: &[&'a Value]) -> Result<Self, OpError> {
-        check_count(values, 2)?;
-        Ok((extract_one(values, 0)?, extract_one(values, 1)?))
-    }
+macro_rules! tuple_inputs {
+    ($count:literal; $($name:ident $index:tt),+) => {
+        impl<'a, $($name: FromValue<'a>),+> Inputs<'a> for ($($name,)+) {
+            fn types() -> Vec<ValueType> {
+                vec![$($name::TYPE),+]
+            }
+            fn extract(values: &[&'a Value]) -> Result<Self, OpError> {
+                check_count(values, $count)?;
+                Ok(($(extract_one::<$name>(values, $index)?,)+))
+            }
+        }
+    };
 }
+
+tuple_inputs!(2; A 0, B 1);
+tuple_inputs!(3; A 0, B 1, C 2);
+tuple_inputs!(4; A 0, B 1, C 2, D 3);
 
 /// The full output list of an operation: a single value, or a tuple of them.
 pub trait Outputs {
@@ -182,11 +200,19 @@ impl<A: IntoValue> Outputs for A {
     }
 }
 
-impl<A: IntoValue, B: IntoValue> Outputs for (A, B) {
-    fn types() -> Vec<ValueType> {
-        vec![A::TYPE, B::TYPE]
-    }
-    fn into_values(self) -> Vec<Value> {
-        vec![self.0.into_value(), self.1.into_value()]
-    }
+macro_rules! tuple_outputs {
+    ($($name:ident $index:tt),+) => {
+        impl<$($name: IntoValue),+> Outputs for ($($name,)+) {
+            fn types() -> Vec<ValueType> {
+                vec![$($name::TYPE),+]
+            }
+            fn into_values(self) -> Vec<Value> {
+                vec![$(self.$index.into_value()),+]
+            }
+        }
+    };
 }
+
+tuple_outputs!(A 0, B 1);
+tuple_outputs!(A 0, B 1, C 2);
+tuple_outputs!(A 0, B 1, C 2, D 3);

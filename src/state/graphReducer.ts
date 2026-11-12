@@ -1,253 +1,215 @@
-import { ConfigValues, Operation } from "@/operations/types";
 import {
-  Edge,
-  Node,
-  applyNodeChanges,
   applyEdgeChanges,
-  NodeChange,
-  EdgeChange,
+  applyNodeChanges,
+  type Connection,
+  type EdgeChange,
+  type NodeChange,
+  type XYPosition,
 } from "@xyflow/react";
+import { canConnect, type OpId } from "@/engine/wasm";
 import {
-  getAffectedNodesFromEdgeChanges,
-  getDownstreamNodes,
-} from "@/nodes/utils";
+  DEFAULT_INPUT_ID,
+  createEdge,
+  createInputNode,
+  createOpNode,
+  inputPorts,
+  outputPorts,
+  type GraphNode,
+  type NodeData,
+} from "@/graph/model";
+import type { GraphSnapshot } from "@/graph/persistence";
 
-export type GraphState = {
-  nodes: Node[];
-  edges: Edge[];
-  selectedNodeId: string;
-  selectedInputId: string;
-  input: string;
-  output: string;
-  selectedNodeTitle: string;
-  dirtyNodes: Set<string>;
-  errors: Map<string, string>;
-  isCalculating: boolean;
-};
+export type GraphState = GraphSnapshot;
 
 export type GraphAction =
-  | { type: "SET_NODES"; nodes: Node[] }
-  | { type: "SET_EDGES"; edges: Edge[] }
-  | { type: "SELECT_NODE"; nodeId: string; nodeTitle: string }
-  | { type: "SELECT_INPUT"; nodeId: string }
-  | { type: "SET_INPUT"; value: string }
-  | { type: "SET_OUTPUT"; value: string }
-  | { type: "ADD_NODE"; node: Node; edge?: Edge }
-  | { type: "UPDATE_NODE_VALUE"; nodeId: string; value: string }
-  | { type: "DELETE_NODES"; nodeIds: string[] }
-  | { type: "APPLY_NODE_CHANGES"; changes: NodeChange[] }
+  | { type: "ADD_INPUT" }
+  | { type: "ADD_OP"; opId: OpId }
+  | { type: "CONNECT"; connection: Connection }
+  | { type: "SET_INPUT_TEXT"; nodeId: string; text: string }
+  | { type: "SET_CONFIG"; nodeId: string; key: string; value: string | number | boolean }
+  | { type: "SET_PER_LINE"; nodeId: string; perLine: boolean }
+  | { type: "SELECT"; nodeId: string }
+  | { type: "APPLY_NODE_CHANGES"; changes: NodeChange<GraphNode>[] }
   | { type: "APPLY_EDGE_CHANGES"; changes: EdgeChange[] }
-  | { type: "SET_EDGES_AND_NODES"; edges: Edge[]; nodes: Node[] }
-  | { type: "SET_NODES_AND_CLEAR_DIRTY"; nodes: Node[] }
-  | { type: "UPDATE_NODE_CONFIG"; nodeId: string; config: ConfigValues }
-  | { type: "SET_ERROR"; nodeId: string; error: string }
-  | { type: "CLEAR_ERROR"; nodeId: string }
-  | { type: "SET_CALCULATING"; isCalculating: boolean }
-  | { type: "CLEANUP_NODE"; nodeId: string }
-  | { type: "LOAD_GRAPH"; state: Partial<GraphState> };
+  | { type: "LOAD"; snapshot: GraphSnapshot };
 
-export const initialGraphState: GraphState = {
-  nodes: [],
-  edges: [],
-  selectedNodeId: "",
-  selectedInputId: "input-node",
-  input: "",
-  output: "",
-  selectedNodeTitle: "",
-  dirtyNodes: new Set<string>(),
-  errors: new Map<string, string>(),
-  isCalculating: false,
-};
+export function createInitialState(): GraphState {
+  return {
+    nodes: [createInputNode({ x: 250, y: 10 }, DEFAULT_INPUT_ID)],
+    edges: [],
+    selectedInputId: DEFAULT_INPUT_ID,
+    selectedNodeId: "",
+  };
+}
 
-export const graphReducer = (
+const NODE_GAP = 80;
+
+function below(node: GraphNode, dx = 0): XYPosition {
+  return {
+    x: node.position.x + dx,
+    y: node.position.y + (node.measured?.height ?? 80) + NODE_GAP,
+  };
+}
+
+function updateData(
   state: GraphState,
-  action: GraphAction
-): GraphState => {
+  nodeId: string,
+  update: (data: NodeData) => NodeData
+): GraphState {
+  return {
+    ...state,
+    nodes: state.nodes.map((node) =>
+      node.id === nodeId ? { ...node, data: update(node.data) } : node
+    ),
+  };
+}
+
+/**
+ * Connects two ports. Bytes cannot feed a text port directly, because decoding can
+ * fail; instead of refusing, the decode step is added to the graph where the user can
+ * see and configure it.
+ */
+function connect(state: GraphState, connection: Connection): GraphState {
+  const source = state.nodes.find((node) => node.id === connection.source);
+  const target = state.nodes.find((node) => node.id === connection.target);
+  const from = source && outputPorts(source.data).find((p) => p.name === connection.sourceHandle);
+  const to = target && inputPorts(target.data).find((p) => p.name === connection.targetHandle);
+  if (!source || !target || !from || !to) return state;
+
+  const occupied = state.edges.some(
+    (edge) => edge.target === target.id && edge.targetHandle === to.name
+  );
+  if (occupied) return state;
+
+  if (canConnect(from.type, to.type)) {
+    return {
+      ...state,
+      edges: [...state.edges, createEdge(source.id, from.name, target.id, to.name)],
+    };
+  }
+
+  if (from.type === "bytes" && to.type === "text") {
+    const decode = createOpNode("utf8-decode", {
+      x: (source.position.x + target.position.x) / 2 + 220,
+      y: (source.position.y + target.position.y) / 2,
+    });
+    return {
+      ...state,
+      nodes: [...state.nodes, decode],
+      edges: [
+        ...state.edges,
+        createEdge(source.id, from.name, decode.id, "input"),
+        createEdge(decode.id, "output", target.id, to.name),
+      ],
+    };
+  }
+
+  return state;
+}
+
+/** Whether {@link connect} would do anything for this pair of port types. */
+export function isConnectable(
+  from: NodeData,
+  fromPort: string,
+  to: NodeData,
+  toPort: string
+): boolean {
+  const source = outputPorts(from).find((port) => port.name === fromPort);
+  const target = inputPorts(to).find((port) => port.name === toPort);
+  if (!source || !target) return false;
+  return (
+    canConnect(source.type, target.type) ||
+    (source.type === "bytes" && target.type === "text")
+  );
+}
+
+/** Adds an operation and wires it to the selected node when the types allow it. */
+function addOp(state: GraphState, opId: OpId): GraphState {
+  const anchor =
+    state.nodes.find((node) => node.id === state.selectedNodeId) ??
+    state.nodes.find((node) => node.id === state.selectedInputId);
+  const node = createOpNode(opId, anchor ? below(anchor) : { x: 250, y: 10 });
+  const added = { ...state, nodes: [...state.nodes, node], selectedNodeId: node.id };
+  if (!anchor) return added;
+
+  const sourcePort = outputPorts(anchor.data)[0];
+  const targetPort = inputPorts(node.data)[0];
+  if (!sourcePort || !targetPort) return added;
+  return connect(added, {
+    source: anchor.id,
+    sourceHandle: sourcePort.name,
+    target: node.id,
+    targetHandle: targetPort.name,
+  });
+}
+
+/** Drops selections that point at nodes which no longer exist. */
+function repairSelection(state: GraphState): GraphState {
+  const ids = new Set(state.nodes.map((node) => node.id));
+  const firstInput = state.nodes.find((node) => node.data.kind === "input")?.id ?? "";
+  const selectedInputId = ids.has(state.selectedInputId) ? state.selectedInputId : firstInput;
+  const selectedNodeId = ids.has(state.selectedNodeId) ? state.selectedNodeId : "";
+  if (selectedInputId === state.selectedInputId && selectedNodeId === state.selectedNodeId) {
+    return state;
+  }
+  return { ...state, selectedInputId, selectedNodeId };
+}
+
+export function graphReducer(state: GraphState, action: GraphAction): GraphState {
   switch (action.type) {
-    case "SET_NODES":
-      return { ...state, nodes: action.nodes };
-
-    case "SET_EDGES": {
-      const changedNodes = getAffectedNodesFromEdgeChanges(
-        state.edges,
-        action.edges
+    case "ADD_INPUT": {
+      const inputs = state.nodes.filter((node) => node.data.kind === "input");
+      const last = inputs[inputs.length - 1];
+      const node = createInputNode(
+        last ? { x: last.position.x + 260, y: last.position.y } : { x: 250, y: 10 }
       );
-      return {
-        ...state,
-        edges: action.edges,
-        dirtyNodes: new Set([...state.dirtyNodes, ...changedNodes]),
-      };
+      return { ...state, nodes: [...state.nodes, node], selectedInputId: node.id };
     }
 
-    case "SELECT_NODE":
-      return {
-        ...state,
-        selectedNodeId: action.nodeId,
-        selectedNodeTitle: action.nodeTitle || "",
-      };
+    case "ADD_OP":
+      return addOp(state, action.opId);
 
-    case "SELECT_INPUT":
-      return {
-        ...state,
-        selectedInputId: action.nodeId,
-        input:
-          (state.nodes.find((n) => n.id === action.nodeId)?.data as Operation)
-            ?.value || "",
-      };
+    case "CONNECT":
+      return connect(state, action.connection);
 
-    case "SET_INPUT":
-      return { ...state, input: action.value };
+    case "SET_INPUT_TEXT":
+      return updateData(state, action.nodeId, (data) =>
+        data.kind === "input" ? { ...data, text: action.text } : data
+      );
 
-    case "SET_OUTPUT":
-      return { ...state, output: action.value };
+    case "SET_CONFIG":
+      return updateData(state, action.nodeId, (data) =>
+        data.kind === "op"
+          ? ({ ...data, config: { ...data.config, [action.key]: action.value } } as NodeData)
+          : data
+      );
 
-    case "ADD_NODE": {
-      const newNodeId = action.node.id;
-      return {
-        ...state,
-        nodes: [...state.nodes, action.node],
-        edges: action.edge ? [...state.edges, action.edge] : state.edges,
-        dirtyNodes: new Set([
-          ...state.dirtyNodes,
-          newNodeId,
-          ...(action.edge ? [action.edge.target] : []),
-        ]),
-      };
+    case "SET_PER_LINE":
+      return updateData(state, action.nodeId, (data) =>
+        data.kind === "op" ? { ...data, perLine: action.perLine } : data
+      );
+
+    case "SELECT": {
+      const node = state.nodes.find((n) => n.id === action.nodeId);
+      if (!node) return { ...state, selectedNodeId: "" };
+      return node.data.kind === "input"
+        ? { ...state, selectedInputId: node.id }
+        : { ...state, selectedNodeId: node.id };
     }
-
-    case "UPDATE_NODE_VALUE": {
-      const affectedNodes = getDownstreamNodes(state.edges, action.nodeId);
-      return {
-        ...state,
-        nodes: state.nodes.map((node) =>
-          node.id === action.nodeId
-            ? {
-                ...node,
-                data: {
-                  ...node.data,
-                  value: action.value,
-                  outputValues: { output: action.value },
-                },
-              }
-            : node
-        ),
-        dirtyNodes: new Set([...state.dirtyNodes, ...affectedNodes]),
-      };
-    }
-
-    case "DELETE_NODES":
-      return {
-        ...state,
-        nodes: state.nodes.filter((node) => !action.nodeIds.includes(node.id)),
-      };
 
     case "APPLY_NODE_CHANGES":
-      return {
+      return repairSelection({
         ...state,
         nodes: applyNodeChanges(action.changes, state.nodes),
-      };
+      });
 
     case "APPLY_EDGE_CHANGES":
-      return {
-        ...state,
-        edges: applyEdgeChanges(action.changes, state.edges),
-      };
+      return { ...state, edges: applyEdgeChanges(action.changes, state.edges) };
 
-    case "SET_EDGES_AND_NODES":
-      return {
-        ...state,
-        edges: action.edges,
-        nodes: action.nodes,
-      };
-
-    case "SET_NODES_AND_CLEAR_DIRTY":
-      return {
-        ...state,
-        nodes: action.nodes,
-        dirtyNodes: new Set(),
-      };
-
-    case "UPDATE_NODE_CONFIG": {
-      const node = state.nodes.find((n) => n.id === action.nodeId);
-      const operation = node?.data as Operation;
-      const funcBuilder = operation?.funcBuilder;
-      if (typeof funcBuilder !== "function") return state;
-
-      const newNodes = state.nodes.map((node) =>
-        node.id === action.nodeId
-          ? {
-              ...node,
-              data: {
-                ...node.data,
-                configValues: action.config,
-                func: funcBuilder(action.config),
-              },
-            }
-          : node
-      );
-
-      const affectedNodes = getDownstreamNodes(state.edges, action.nodeId);
-      affectedNodes.push(action.nodeId);
-      return {
-        ...state,
-        nodes: newNodes,
-        dirtyNodes: new Set([...state.dirtyNodes, ...affectedNodes]),
-      };
-    }
-
-    case "SET_ERROR": {
-      const newErrors = new Map(state.errors);
-      newErrors.set(action.nodeId, action.error);
-      return {
-        ...state,
-        errors: newErrors,
-      };
-    }
-
-    case "CLEAR_ERROR": {
-      const newErrors = new Map(state.errors);
-      newErrors.delete(action.nodeId);
-      return {
-        ...state,
-        errors: newErrors,
-      };
-    }
-
-    case "SET_CALCULATING":
-      return {
-        ...state,
-        isCalculating: action.isCalculating,
-      };
-
-    case "CLEANUP_NODE": {
-      const node = state.nodes.find((n) => n.id === action.nodeId);
-      const operation = node?.data as Operation;
-      if (operation?.cleanup) {
-        operation.cleanup();
-      }
-      return state;
-    }
-
-    case "LOAD_GRAPH": {
-      // Merge loaded state while preserving transient runtime state
-      return {
-        ...state,
-        nodes: action.state.nodes || state.nodes,
-        edges: action.state.edges || state.edges,
-        selectedInputId: action.state.selectedInputId || state.selectedInputId,
-        input: action.state.input || state.input,
-        selectedNodeId: action.state.selectedNodeId || state.selectedNodeId,
-        selectedNodeTitle:
-          action.state.selectedNodeTitle || state.selectedNodeTitle,
-        // Preserve transient state
-        dirtyNodes: new Set<string>(),
-        errors: new Map<string, string>(),
-        isCalculating: false,
-        output: "",
-      };
-    }
+    case "LOAD":
+      return action.snapshot;
 
     default:
       return state;
   }
-};
+}

@@ -1,13 +1,18 @@
 import React, { useRef } from "react";
 import { Download, Upload, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { GraphState } from "@/state/graphReducer";
-import { generateShareableURL, copyToClipboard } from "@/utils/urlSharing";
+import {
+  deserialize,
+  serialize,
+  toShareUrl,
+  type GraphSnapshot,
+} from "@/graph/persistence";
+import { copyToClipboard } from "@/utils/clipboard";
 import { showNotification } from "@/utils/notifications";
 
 interface GraphControlsProps {
-  state: GraphState;
-  onImport: (file: File) => void;
+  state: GraphSnapshot;
+  onImport: (snapshot: GraphSnapshot) => void;
   onClear: () => void;
 }
 
@@ -20,18 +25,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
 
   const handleExport = () => {
     try {
-      const graphData = {
-        version: "1.0",
-        timestamp: new Date().toISOString(),
-        nodes: state.nodes,
-        edges: state.edges,
-        selectedInputId: state.selectedInputId,
-        input: state.input,
-        selectedNodeId: state.selectedNodeId,
-        selectedNodeTitle: state.selectedNodeTitle,
-      };
-
-      const jsonString = JSON.stringify(graphData, null, 2);
+      const jsonString = serialize(state);
       const blob = new Blob([jsonString], { type: "application/json" });
       const url = URL.createObjectURL(blob);
 
@@ -61,20 +55,12 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const content = e.target?.result as string;
-        const parsed = JSON.parse(content);
-
-        // Validate structure
-        if (!parsed.nodes || !parsed.edges) {
-          throw new Error("Invalid graph file format");
-        }
-
-        onImport(file);
+    reader.onload = () => {
+      const snapshot = deserialize(String(reader.result));
+      if (snapshot && snapshot.nodes.length > 0) {
+        onImport(snapshot);
         showNotification("Graph imported successfully!", "success");
-      } catch (error) {
-        console.error("Import failed:", error);
+      } else {
         showNotification("Invalid graph file", "error");
       }
     };
@@ -88,7 +74,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
 
   const handleShare = async () => {
     try {
-      const shareableURL = generateShareableURL(state);
+      const shareableURL = toShareUrl(state);
       const success = await copyToClipboard(shareableURL);
 
       if (success) {

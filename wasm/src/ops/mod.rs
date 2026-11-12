@@ -2,6 +2,7 @@
 
 pub mod base64;
 pub mod caesar;
+pub mod encoding;
 pub mod hash;
 pub mod text;
 
@@ -13,7 +14,15 @@ use crate::core::{entry, NoConfig, Op, OpEntry};
 use base64::{Base64StandardDecode, Base64StandardEncode, Base64UrlDecode, Base64UrlEncode};
 use caesar::{CaesarCipher, CaesarConfig, Rot13};
 use hash::{Md5Hash, Sha1Hash, Sha256};
-use text::{Utf8Decode, Utf8DecodeConfig};
+use encoding::{
+    Base16Decode, Base16Encode, Base32Decode, Base32Encode, Base85Decode, Base85Encode,
+    HexEncodeConfig,
+};
+use text::{
+    ConcatenateConfig, ConcatenateText, CountWords, DelimiterConfig, JoinText, Lowercase,
+    RemoveSpaces, Reverse, SliceConfig, SliceText, SplitText, TextStats, Uppercase, Utf8Decode,
+    Utf8DecodeConfig,
+};
 
 /// Registers operations and emits the TypeScript `OpConfigMap` that ties each id to its
 /// config type. The id has to be repeated as a literal because `concat!` cannot read an
@@ -54,6 +63,22 @@ ops! {
     "caesar-cipher" => CaesarCipher: CaesarConfig,
     "rot13" => Rot13: NoConfig,
     "utf8-decode" => Utf8Decode: Utf8DecodeConfig,
+    "base16-encode" => Base16Encode: HexEncodeConfig,
+    "base16-decode" => Base16Decode: NoConfig,
+    "base32-encode" => Base32Encode: NoConfig,
+    "base32-decode" => Base32Decode: NoConfig,
+    "base85-encode" => Base85Encode: NoConfig,
+    "base85-decode" => Base85Decode: NoConfig,
+    "reverse" => Reverse: NoConfig,
+    "to-uppercase" => Uppercase: NoConfig,
+    "to-lowercase" => Lowercase: NoConfig,
+    "remove-spaces" => RemoveSpaces: NoConfig,
+    "slice-text" => SliceText: SliceConfig,
+    "count-words" => CountWords: NoConfig,
+    "text-stats" => TextStats: NoConfig,
+    "split-text" => SplitText: DelimiterConfig,
+    "join-text" => JoinText: DelimiterConfig,
+    "concatenate-text" => ConcatenateText: ConcatenateConfig,
 }
 
 pub fn find(id: &str) -> Option<&'static OpEntry> {

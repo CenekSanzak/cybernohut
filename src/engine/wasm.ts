@@ -1,17 +1,30 @@
 /**
  * Typed access to the Rust engine.
  *
- * Every type here is generated from the Rust source by wasm-bindgen and tsify. This
- * file only narrows the two places where the generated signature is looser than the
- * contract: handles are branded, and `run` ties the config type to the operation id.
+ * Every type here is generated from the Rust source by wasm-bindgen and tsify; nothing
+ * about an operation is declared in TypeScript.
  */
 import * as wasm from "wasm";
 import type {
+  Graph,
+  NodeReport,
+  OpConfigMap,
+  OpId,
+  OpMeta,
+  ValueType,
+} from "wasm";
+
+export type {
   ErrorCode,
+  Graph,
+  GraphEdge,
+  GraphNode as EngineNode,
+  NodeReport,
   OpConfigMap,
   OpError,
   OpId,
   OpMeta,
+  OutputPreview,
   ParamKind,
   ParamSpec,
   Port,
@@ -19,97 +32,42 @@ import type {
   ValueType,
 } from "wasm";
 
-export type {
-  ErrorCode,
-  OpConfigMap,
-  OpError,
-  OpId,
-  OpMeta,
-  ParamKind,
-  ParamSpec,
-  Port,
-  Tag,
-  ValueType,
+/** The catalog entry of one operation, with its config default typed by its id. */
+export type OpMetaOf<K extends OpId> = OpMeta & {
+  id: K;
+  default_config: Required<OpConfigMap[K]>;
 };
 
-/** A value that lives in wasm memory. Release it when it is no longer needed. */
-export type Handle = number & { readonly __brand: "Handle" };
+export const catalog = wasm.catalog() as readonly OpMetaOf<OpId>[];
 
-/** A value copied out of wasm memory, tagged with its type. */
-export type Value =
-  | { type: "bytes"; value: Uint8Array }
-  | { type: "text"; value: string }
-  | { type: "number"; value: number }
-  | { type: "text_list"; value: string[] }
-  | { type: "number_list"; value: number[] };
+const metaById = new Map<string, OpMeta>(catalog.map((meta) => [meta.id, meta]));
 
-type OpMetaById = { [K in OpId]: OpMeta & { id: K } };
-
-export const catalog: readonly OpMeta[] = wasm.catalog();
-
-const metaById = Object.fromEntries(
-  catalog.map((meta) => [meta.id, meta])
-) as OpMetaById;
-
-export function isOpId(id: string): id is OpId {
-  return id in metaById;
+export function isOpId(id: unknown): id is OpId {
+  return typeof id === "string" && metaById.has(id);
 }
 
-export function getMeta<K extends OpId>(id: K): OpMetaById[K] {
-  return metaById[id];
+export function getMeta<K extends OpId>(id: K): OpMetaOf<K> {
+  return metaById.get(id) as OpMetaOf<K>;
 }
 
-export function isOpError(error: unknown): error is OpError {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    "message" in error
-  );
+/** Whether an output of type `from` may feed an input of type `to`. */
+export function canConnect(from: ValueType, to: ValueType): boolean {
+  return wasm.can_connect(from, to);
 }
 
-/** Runs an operation on stored values. Throws an {@link OpError}. */
-export function run<K extends OpId>(
-  id: K,
-  config: OpConfigMap[K],
-  inputs: readonly Handle[]
-): Handle[] {
-  return Array.from(
-    wasm.run(id, config, Uint32Array.from(inputs))
-  ) as Handle[];
+/** How many characters of each output the engine returns as a preview. */
+const PREVIEW_CHARS = 60;
+
+/**
+ * Evaluates the whole graph. A node that fails is reported, not thrown; this throws
+ * only if the graph description itself is malformed.
+ */
+export function evaluate(graph: Graph): Map<string, NodeReport> {
+  const reports = wasm.evaluate(graph, PREVIEW_CHARS);
+  return new Map(reports.map((report) => [report.id, report]));
 }
 
-export function put(value: Value): Handle {
-  switch (value.type) {
-    case "bytes":
-      return wasm.put_bytes(value.value) as Handle;
-    case "text":
-      return wasm.put_text(value.value) as Handle;
-    case "number":
-      return wasm.put_number(value.value) as Handle;
-    case "text_list":
-      return wasm.put_text_list(value.value) as Handle;
-    case "number_list":
-      return wasm.put_number_list(Float64Array.from(value.value)) as Handle;
-  }
-}
-
-export function get(handle: Handle): Value {
-  const type = wasm.value_type(handle);
-  switch (type) {
-    case "bytes":
-      return { type, value: wasm.get_bytes(handle) };
-    case "text":
-      return { type, value: wasm.get_text(handle) };
-    case "number":
-      return { type, value: wasm.get_number(handle) };
-    case "text_list":
-      return { type, value: wasm.get_text_list(handle) };
-    case "number_list":
-      return { type, value: Array.from(wasm.get_number_list(handle)) };
-  }
-}
-
-export function release(handle: Handle): void {
-  wasm.release(handle);
+/** The full output of a node, from the most recent {@link evaluate} call. */
+export function outputText(nodeId: string, port: string): string | undefined {
+  return wasm.output_text(nodeId, port);
 }

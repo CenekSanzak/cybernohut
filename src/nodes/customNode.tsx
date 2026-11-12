@@ -1,195 +1,208 @@
-import React, { useMemo } from "react";
-import { Handle, Position } from "@xyflow/react";
-import { Operation, OperationTags } from "@/operations/types";
-import { formatDataValueForDisplay } from "@/operations/execution";
+import React, { useContext } from "react";
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import {
+  getMeta,
+  type NodeReport,
+  type ParamSpec,
+  type Port,
+  type ValueType,
+} from "@/engine/wasm";
+import { GraphDispatchContext, ReportsContext } from "@/graph/context";
+import {
+  configOf,
+  inputPorts,
+  nodeTitle,
+  outputPorts,
+  type GraphNode,
+  type OpNodeData,
+} from "@/graph/model";
 
-interface CustomNodeProps {
-  id: string;
-  data: Operation;
-  selected?: boolean;
-}
-
-const propsAreEqual = (
-  prevProps: CustomNodeProps,
-  nextProps: CustomNodeProps
-) => {
-  return (
-    prevProps.id === nextProps.id &&
-    prevProps.selected === nextProps.selected &&
-    prevProps.data.value === nextProps.data.value &&
-    prevProps.data.outputValues === nextProps.data.outputValues &&
-    prevProps.data.configValues === nextProps.data.configValues
-  );
+const typeColor: Record<ValueType, string> = {
+  text: "#2563eb",
+  bytes: "#ea580c",
+  number: "#16a34a",
+  text_list: "#9333ea",
+  number_list: "#9333ea",
 };
 
-const CustomNode = ({ id, data, selected }: CustomNodeProps) => {
-  const input_length = data.inputs ? Object.keys(data.inputs).length : 0;
-  const output_length = data.outputs ? Object.keys(data.outputs).length : 0;
-  const inputHandles = useMemo(() => {
-    if (!data.inputs) return null;
-    return Object.entries(data.inputs).map(([key, type], index) => (
-      <Handle
-        key={key}
-        type="target"
-        position={Position.Top}
-        id={key}
-        style={{
-          background: "red",
-          left: `${+(50 / input_length + (100 / input_length) * index)}%`,
-          textAlign: "center",
-        }}
-        aria-label={`Input ${key} of type ${type}`}
-      >
-        <span
-          style={{
-            position: "absolute",
-            transform: "translate(-50%, -110%)",
-            fontSize: "10px",
-            left: `${+(50 / input_length + (100 / input_length) * index)}%`,
-            color: data.inputTypes?.[index] ? "#2563eb" : "#6b7280",
-          }}
-        >
-          {key} ({data.inputTypes?.[index]?.type || type})
-        </span>
-      </Handle>
-    ));
-  }, [data.inputs, input_length, data.inputTypes]);
+const typeLabel: Record<ValueType, string> = {
+  text: "text",
+  bytes: "bytes",
+  number: "number",
+  text_list: "text list",
+  number_list: "number list",
+};
 
-  const outputHandles = useMemo(() => {
-    if (!data.outputs) return null;
-    return Object.entries(data.outputs).map(([key, type], index) => (
-      <Handle
-        key={key}
-        type="source"
-        position={Position.Bottom}
-        id={key}
-        style={{
-          background: "blue",
-          left: `${+(50 / output_length + (100 / output_length) * index)}%`,
-          textAlign: "center",
-        }}
-        aria-label={`Output ${key} of type ${type}`}
-      >
-        <span
-          style={{
-            position: "absolute",
-            transform: "translate(-50%, 20%)",
-            fontSize: "10px",
-            color: data.outputTypes?.[index] ? "#2563eb" : "#6b7280",
-          }}
-        >
-          {key} ({data.outputTypes?.[index]?.type || type})
-        </span>
-      </Handle>
-    ));
-  }, [data.outputs, output_length, data.outputTypes]);
-
-  const configInputs = useMemo(() => {
-    if (!data.configValues) return null;
+function Ports({ ports, side }: { ports: readonly Port[]; side: "input" | "output" }) {
+  return ports.map((port, index) => {
+    const left = `${(100 / ports.length) * (index + 0.5)}%`;
+    const isInput = side === "input";
     return (
-      <div className="mt-2 border-t pt-2">
-        {Object.entries(data.configValues).map(([key, value]) => (
-          <div key={key} className="flex items-center text-xs">
-            <label className="mr-2">{key}:</label>
-            {typeof value === "boolean" ? (
-              <input
-                type="checkbox"
-                checked={value}
-                onChange={(e) => {
-                  if (data.onConfigChange) {
-                    data.onConfigChange({
-                      ...data.configValues,
-                      [key]: e.target.checked,
-                    });
-                  }
-                }}
-                aria-label={`${key} configuration`}
-              />
-            ) : typeof value === "number" ? (
-              <input
-                type="number"
-                value={value}
-                onChange={(e) => {
-                  if (data.onConfigChange) {
-                    data.onConfigChange({
-                      ...data.configValues,
-                      [key]: Number(e.target.value),
-                    });
-                  }
-                }}
-                className="w-16 px-1"
-                aria-label={`${key} configuration`}
-              />
-            ) : (
-              <input
-                type="text"
-                value={value}
-                onChange={(e) => {
-                  if (data.onConfigChange) {
-                    data.onConfigChange({
-                      ...data.configValues,
-                      [key]: e.target.value,
-                    });
-                  }
-                }}
-                className="w-24 px-1"
-                aria-label={`${key} configuration`}
-              />
-            )}
-          </div>
-        ))}
-      </div>
+      <Handle
+        key={port.name}
+        id={port.name}
+        type={isInput ? "target" : "source"}
+        position={isInput ? Position.Top : Position.Bottom}
+        style={{ background: typeColor[port.type], left }}
+        aria-label={`${isInput ? "Input" : "Output"} ${port.name} of type ${typeLabel[port.type]}`}
+      >
+        <span
+          className="absolute whitespace-nowrap text-[10px]"
+          style={{
+            color: typeColor[port.type],
+            transform: isInput ? "translate(-50%, -110%)" : "translate(-50%, 20%)",
+          }}
+        >
+          {port.name} ({typeLabel[port.type]})
+        </span>
+      </Handle>
     );
-  }, [data]);
+  });
+}
 
-  const nodeClassName = useMemo(
-    () =>
-      `p-4 border rounded shadow-md bg-white items-center cursor-pointer hover:bg-gray-50 ${
-        selected ? "border-blue-500 border-2" : ""
-      } ${data.tags.includes(OperationTags.IO) ? "bg-gray-50" : ""} ${
-        data.error ? "border-red-500 border-2" : ""
-      }`,
-    [selected, data.tags, data.error]
-  );
+function ParamInput({
+  nodeId,
+  spec,
+  value,
+}: {
+  nodeId: string;
+  spec: ParamSpec;
+  value: string | number | boolean;
+}) {
+  const dispatch = useContext(GraphDispatchContext);
+  const set = (next: string | number | boolean) =>
+    dispatch({ type: "SET_CONFIG", nodeId, key: spec.key, value: next });
+  const label = `${spec.label} configuration`;
+
+  switch (spec.kind.kind) {
+    case "bool":
+      return (
+        <input
+          type="checkbox"
+          className="nodrag"
+          checked={value === true}
+          onChange={(e) => set(e.target.checked)}
+          aria-label={label}
+        />
+      );
+    case "int":
+      return (
+        <input
+          type="number"
+          className="nodrag w-16 px-1 border rounded"
+          value={Number(value)}
+          min={spec.kind.min ?? undefined}
+          max={spec.kind.max ?? undefined}
+          step={1}
+          onChange={(e) => set(Math.trunc(Number(e.target.value)) || 0)}
+          aria-label={label}
+        />
+      );
+    case "choice":
+      return (
+        <select
+          className="nodrag px-1 border rounded"
+          value={String(value)}
+          onChange={(e) => set(e.target.value)}
+          aria-label={label}
+        >
+          {spec.kind.options.map((option) => (
+            <option key={option}>{option}</option>
+          ))}
+        </select>
+      );
+    case "text":
+      return (
+        <input
+          type="text"
+          className="nodrag w-24 px-1 border rounded"
+          value={String(value)}
+          onChange={(e) => set(e.target.value)}
+          aria-label={label}
+        />
+      );
+  }
+}
+
+function Settings({ nodeId, data }: { nodeId: string; data: OpNodeData }) {
+  const dispatch = useContext(GraphDispatchContext);
+  const meta = getMeta(data.opId);
+  if (meta.params.length === 0 && !meta.supports_per_line) return null;
+  const config = configOf(data);
 
   return (
-    <div className={nodeClassName} data-value={data.value}>
-      <div>
-        <strong>{data.name}</strong>
-        <div className="text-[10px] text-gray-600 -mt-1">{id}</div>
-        {data.error && (
-          <div className="text-[10px] text-red-600 mt-1" title={data.error}>
-            ⚠️ {data.error}
-          </div>
-        )}
-      </div>
-      {inputHandles}
+    <div className="mt-2 border-t pt-2 space-y-1 text-xs">
+      {meta.params.map((spec) => (
+        <label key={spec.key} className="flex items-center justify-between gap-2">
+          {spec.label}
+          <ParamInput nodeId={nodeId} spec={spec} value={config[spec.key]} />
+        </label>
+      ))}
+      {meta.supports_per_line && (
+        <label
+          className="flex items-center justify-between gap-2 text-gray-600"
+          title="Apply the operation to each line separately"
+        >
+          Line by line
+          <input
+            type="checkbox"
+            className="nodrag"
+            checked={data.perLine}
+            onChange={(e) =>
+              dispatch({ type: "SET_PER_LINE", nodeId, perLine: e.target.checked })
+            }
+            aria-label="Line by line"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function Result({ report }: { report: NodeReport | undefined }) {
+  if (!report) return null;
+  switch (report.status) {
+    case "ok":
+      return report.outputs.map((output) => (
+        <div key={output.port} className="text-gray-600 break-all">
+          {report.outputs.length > 1 && <span className="font-medium">{output.port}: </span>}
+          {output.preview}
+          {output.truncated && "…"}
+        </div>
+      ));
+    case "error":
+      return (
+        <div className="text-red-600" role="alert">
+          {report.error.message}
+        </div>
+      );
+    case "waiting":
+      return <div className="text-gray-400">Not connected</div>;
+    case "blocked":
+      return <div className="text-gray-400">Waiting for an earlier step</div>;
+  }
+}
+
+const CustomNode = ({ id, data, selected }: NodeProps<GraphNode>) => {
+  const report = useContext(ReportsContext).get(id);
+  const failed = report?.status === "error";
+
+  return (
+    <div
+      className={`p-4 border rounded shadow-md max-w-64 cursor-pointer hover:bg-gray-50 ${
+        data.kind === "input" ? "bg-gray-50" : "bg-white"
+      } ${failed ? "border-red-500 border-2" : selected ? "border-blue-500 border-2" : ""}`}
+    >
+      <Ports ports={inputPorts(data)} side="input" />
+      <strong>{nodeTitle(data)}</strong>
+      <div className="text-[10px] text-gray-600 -mt-1">{id}</div>
       <div className="mt-2 text-xs">
-        {/* For Input nodes, show the input value instead of output */}
-        {data.id === "input" ? (
-          <div className="text-gray-600">
-            {data.value?.slice(0, 30) || "No input"}
-            {data.value && data.value.length > 30 && "..."}
-          </div>
-        ) : data.outputValues ? (
-          Object.entries(data.outputValues).map(([key, value]) => (
-            <div key={key} className="mb-1">
-              <span className="font-medium">{key}:</span>{" "}
-              <span className="text-gray-600">
-                {formatDataValueForDisplay(value)}
-              </span>
-            </div>
-          ))
-        ) : (
-          data.value?.slice(0, 30) || ""
-        )}
+        <Result report={report} />
       </div>
-      {configInputs}
-      {outputHandles}
+      {data.kind === "op" && <Settings nodeId={id} data={data} />}
+      <Ports ports={outputPorts(data)} side="output" />
     </div>
   );
 };
 
-CustomNode.displayName = "CustomNode";
-
-export const MemoizedCustomNode = React.memo(CustomNode, propsAreEqual);
+export const MemoizedCustomNode = React.memo(CustomNode);

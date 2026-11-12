@@ -1,7 +1,6 @@
 import type React from "react";
 import { useState, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import { type Operation, OperationTags } from "@/operations/types";
 import { ChevronRight, ChevronDown, Search } from "lucide-react";
 import Fuse from "fuse.js";
 import {
@@ -11,13 +10,23 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-interface SidebarProps {
-  operations: Operation[];
-  onOperationSelect: (operation: Operation) => void;
+export interface SidebarItem {
+  id: string;
+  name: string;
+  description: string;
+  link?: string;
+  tags: string[];
 }
 
+interface SidebarProps {
+  operations: SidebarItem[];
+  onOperationSelect: (operation: SidebarItem) => void;
+}
+
+const ALL = "All";
+
 const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
-  const [expandedTags, setExpandedTags] = useState<OperationTags[]>([]);
+  const [expandedTags, setExpandedTags] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
 
   const fuse = useMemo(
@@ -37,20 +46,20 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
       .map((result) => result.item);
   }, [searchQuery, fuse]);
 
-  const toggleTag = (tag: OperationTags) => {
+  const toggleTag = (tag: string) => {
     setExpandedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
 
   const groupedOperations = useMemo(() => {
-    return Object.values(OperationTags).reduce((acc, tag) => {
-      const filteredOps = operations.filter((op) => op.tags.includes(tag));
-      if (filteredOps.length > 0) {
-        acc[tag] = filteredOps;
+    const groups: Record<string, SidebarItem[]> = { [ALL]: operations };
+    for (const operation of operations) {
+      for (const tag of operation.tags) {
+        (groups[tag] ??= []).push(operation);
       }
-      return acc;
-    }, {} as Record<OperationTags, Operation[]>);
+    }
+    return groups;
   }, [operations]);
 
   return (
@@ -120,16 +129,16 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
           <Button
             variant="ghost"
             className="w-full justify-between font-semibold"
-            onClick={() => toggleTag(tag as OperationTags)}
+            onClick={() => toggleTag(tag)}
           >
             {tag}
-            {expandedTags.includes(tag as OperationTags) ? (
+            {expandedTags.includes(tag) ? (
               <ChevronDown className="h-4 w-4" />
             ) : (
               <ChevronRight className="h-4 w-4" />
             )}
           </Button>
-          {expandedTags.includes(tag as OperationTags) && (
+          {expandedTags.includes(tag) && (
             <div className="ml-4 mt-2 space-y-2">
               {ops.map((op) => (
                 <TooltipProvider key={op.id}>

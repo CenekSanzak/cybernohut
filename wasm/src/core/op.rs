@@ -85,6 +85,8 @@ pub struct OpMeta {
     pub inputs: Vec<Port>,
     pub outputs: Vec<Port>,
     pub params: Vec<ParamSpec>,
+    /// Whether the node can be switched to run on each line separately.
+    pub supports_per_line: bool,
     #[tsify(type = "Record<string, string | number | boolean>")]
     pub default_config: serde_json::Value,
 }
@@ -106,15 +108,22 @@ fn ports(names: &[&str], types: Vec<ValueType>) -> Vec<Port> {
 }
 
 fn meta_of<T: Op>() -> OpMeta {
+    let inputs = ports(T::INPUTS, <T::In<'static> as Inputs>::types());
+    let outputs = ports(T::OUTPUTS, <T::Out as Outputs>::types());
+    let supports_per_line = inputs.len() == 1
+        && inputs[0].ty.accepts(ValueType::Text)
+        && outputs.len() == 1
+        && outputs[0].ty == ValueType::Text;
     OpMeta {
         id: T::ID.into(),
         name: T::NAME.into(),
         description: T::DESCRIPTION.into(),
         link: T::LINK.map(Into::into),
         tags: T::TAGS.to_vec(),
-        inputs: ports(T::INPUTS, <T::In<'static> as Inputs>::types()),
-        outputs: ports(T::OUTPUTS, <T::Out as Outputs>::types()),
+        inputs,
+        outputs,
         params: T::params(),
+        supports_per_line,
         default_config: serde_json::to_value(T::Config::default())
             .expect("a default config always serializes"),
     }

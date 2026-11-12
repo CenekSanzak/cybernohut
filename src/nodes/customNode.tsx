@@ -1,4 +1,4 @@
-import React, { useContext } from "react";
+import React, { useContext, useRef } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import {
   getMeta,
@@ -8,11 +8,13 @@ import {
   type ValueType,
 } from "@/engine/wasm";
 import { GraphDispatchContext, ReportsContext } from "@/graph/context";
+import { formatBytes, loadFile } from "@/graph/files";
 import {
   configOf,
   inputPorts,
   nodeTitle,
   outputPorts,
+  type FileNodeData,
   type GraphNode,
   type OpNodeData,
 } from "@/graph/model";
@@ -159,6 +161,39 @@ function Settings({ nodeId, data }: { nodeId: string; data: OpNodeData }) {
   );
 }
 
+function FilePicker({ nodeId, data }: { nodeId: string; data: FileNodeData }) {
+  const dispatch = useContext(GraphDispatchContext);
+  const input = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="mt-2 border-t pt-2 text-xs">
+      {data.name && (
+        <div className="mb-1 text-gray-600 break-all">
+          {data.name} ({formatBytes(data.size)})
+        </div>
+      )}
+      <button
+        type="button"
+        className="nodrag px-2 py-0.5 border rounded hover:bg-gray-100"
+        onClick={() => input.current?.click()}
+      >
+        {data.name ? "Replace file" : "Choose file"}
+      </button>
+      <input
+        ref={input}
+        type="file"
+        className="hidden"
+        aria-label="File to load"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          if (file) void loadFile(nodeId, file, dispatch);
+          event.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
 function Result({ report }: { report: NodeReport | undefined }) {
   if (!report) return null;
   switch (report.status) {
@@ -190,7 +225,7 @@ const CustomNode = ({ id, data, selected }: NodeProps<GraphNode>) => {
   return (
     <div
       className={`p-4 border rounded shadow-md max-w-64 cursor-pointer hover:bg-gray-50 ${
-        data.kind === "input" ? "bg-gray-50" : "bg-white"
+        data.kind === "op" ? "bg-white" : "bg-gray-50"
       } ${failed ? "border-red-500 border-2" : selected ? "border-blue-500 border-2" : ""}`}
     >
       <Ports ports={inputPorts(data)} side="input" />
@@ -200,6 +235,7 @@ const CustomNode = ({ id, data, selected }: NodeProps<GraphNode>) => {
         <Result report={report} />
       </div>
       {data.kind === "op" && <Settings nodeId={id} data={data} />}
+      {data.kind === "file" && <FilePicker nodeId={id} data={data} />}
       <Ports ports={outputPorts(data)} side="output" />
     </div>
   );

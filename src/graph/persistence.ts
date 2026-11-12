@@ -75,6 +75,8 @@ function readOpData(opId: unknown, config: unknown, perLine: unknown): NodeData 
 function readData(data: unknown): NodeData | null {
   if (!isObject(data)) return null;
   if (data.kind === "input") return { kind: "input", text: asString(data.text) };
+  // File content is never saved, so a loaded file node starts out empty.
+  if (data.kind === "file") return { kind: "file", name: "", size: 0 };
   if (data.kind === "op") return readOpData(data.opId, data.config, data.perLine);
   // Version 1 stored the whole operation object, functions and all, on the node.
   if (data.id === "input") return { kind: "input", text: asString(data.value) };

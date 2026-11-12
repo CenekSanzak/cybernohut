@@ -17,6 +17,9 @@ A visual toolkit for transforming data: encodings, hashes and classic ciphers, w
   text adds a visible "Decode Text (UTF-8)" step rather than converting silently.
 - **Runs off the main thread.** Evaluation happens in a Web Worker. A newer run cancels
   the one in flight, and an out-of-memory crash restarts the engine instead of the page.
+- **Files in, files out.** A file node feeds raw bytes into a graph without going
+  through text, and any output can be downloaded. File content is not saved with the
+  graph.
 - **Shareable.** A graph is plain data: it is saved locally, exported as JSON, or packed
   into a link.
 

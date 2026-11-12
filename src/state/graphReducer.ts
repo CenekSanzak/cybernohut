@@ -10,6 +10,7 @@ import { canConnect, type OpId } from "@/engine/wasm";
 import {
   DEFAULT_INPUT_ID,
   createEdge,
+  createFileNode,
   createInputNode,
   createOpNode,
   inputPorts,
@@ -23,6 +24,8 @@ export type GraphState = GraphSnapshot;
 
 export type GraphAction =
   | { type: "ADD_INPUT" }
+  | { type: "ADD_FILE" }
+  | { type: "SET_FILE"; nodeId: string; name: string; size: number }
   | { type: "ADD_OP"; opId: OpId }
   | { type: "CONNECT"; connection: Connection }
   | { type: "SET_INPUT_TEXT"; nodeId: string; text: string }
@@ -143,6 +146,13 @@ function addOp(state: GraphState, opId: OpId): GraphState {
   });
 }
 
+/** Where a new input or file node goes: to the right of the last one. */
+function nextSourcePosition(state: GraphState): XYPosition {
+  const sources = state.nodes.filter((node) => node.data.kind !== "op");
+  const last = sources[sources.length - 1];
+  return last ? { x: last.position.x + 260, y: last.position.y } : { x: 250, y: 10 };
+}
+
 /** Drops selections that point at nodes which no longer exist. */
 function repairSelection(state: GraphState): GraphState {
   const ids = new Set(state.nodes.map((node) => node.id));
@@ -158,13 +168,19 @@ function repairSelection(state: GraphState): GraphState {
 export function graphReducer(state: GraphState, action: GraphAction): GraphState {
   switch (action.type) {
     case "ADD_INPUT": {
-      const inputs = state.nodes.filter((node) => node.data.kind === "input");
-      const last = inputs[inputs.length - 1];
-      const node = createInputNode(
-        last ? { x: last.position.x + 260, y: last.position.y } : { x: 250, y: 10 }
-      );
+      const node = createInputNode(nextSourcePosition(state));
       return { ...state, nodes: [...state.nodes, node], selectedInputId: node.id };
     }
+
+    case "ADD_FILE": {
+      const node = createFileNode(nextSourcePosition(state));
+      return { ...state, nodes: [...state.nodes, node], selectedNodeId: node.id };
+    }
+
+    case "SET_FILE":
+      return updateData(state, action.nodeId, (data) =>
+        data.kind === "file" ? { ...data, name: action.name, size: action.size } : data
+      );
 
     case "ADD_OP":
       return addOp(state, action.opId);

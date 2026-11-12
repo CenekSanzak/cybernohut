@@ -23,7 +23,10 @@ export type OpNodeData = {
   };
 }[OpId];
 
-export type NodeData = InputNodeData | OpNodeData;
+/** A file's bytes are held by the engine, not here: only what the node displays. */
+export type FileNodeData = { kind: "file"; name: string; size: number };
+
+export type NodeData = InputNodeData | FileNodeData | OpNodeData;
 export type GraphNode = Node<NodeData, "custom">;
 
 /** A config as the generic, catalog-driven form sees it. */
@@ -32,17 +35,32 @@ export type ConfigRecord = Record<string, string | number | boolean>;
 export const DEFAULT_INPUT_ID = "input-node";
 
 const INPUT_NODE_OUTPUTS: readonly Port[] = [{ name: "output", type: "text" }];
+const FILE_NODE_OUTPUTS: readonly Port[] = [{ name: "output", type: "bytes" }];
 
 export function inputPorts(data: NodeData): readonly Port[] {
-  return data.kind === "input" ? [] : getMeta(data.opId).inputs;
+  return data.kind === "op" ? getMeta(data.opId).inputs : [];
 }
 
 export function outputPorts(data: NodeData): readonly Port[] {
-  return data.kind === "input" ? INPUT_NODE_OUTPUTS : getMeta(data.opId).outputs;
+  switch (data.kind) {
+    case "input":
+      return INPUT_NODE_OUTPUTS;
+    case "file":
+      return FILE_NODE_OUTPUTS;
+    case "op":
+      return getMeta(data.opId).outputs;
+  }
 }
 
 export function nodeTitle(data: NodeData): string {
-  return data.kind === "input" ? "Input" : getMeta(data.opId).name;
+  switch (data.kind) {
+    case "input":
+      return "Input";
+    case "file":
+      return "File";
+    case "op":
+      return getMeta(data.opId).name;
+  }
 }
 
 export function configOf(data: OpNodeData): ConfigRecord {
@@ -57,6 +75,15 @@ export function createInputNode(
   id = shortId("input")
 ): GraphNode {
   return { id, type: "custom", position, data: { kind: "input", text: "" } };
+}
+
+export function createFileNode(position: XYPosition): GraphNode {
+  return {
+    id: shortId("file"),
+    type: "custom",
+    position,
+    data: { kind: "file", name: "", size: 0 },
+  };
 }
 
 export function createOpNode<K extends OpId>(
@@ -90,17 +117,22 @@ export function createEdge(
 /** The graph as the engine wants it: positions and selection dropped. */
 export function toEngineGraph(nodes: GraphNode[], edges: Edge[]): Graph {
   return {
-    nodes: nodes.map(({ id, data }) =>
-      data.kind === "input"
-        ? { kind: "input", id, text: data.text }
-        : {
+    nodes: nodes.map(({ id, data }) => {
+      switch (data.kind) {
+        case "input":
+          return { kind: "input", id, text: data.text };
+        case "file":
+          return { kind: "file", id };
+        case "op":
+          return {
             kind: "op",
             id,
             op_id: data.opId,
             config: configOf(data),
             per_line: data.perLine,
-          }
-    ),
+          };
+      }
+    }),
     edges: edges.flatMap((edge) =>
       edge.sourceHandle && edge.targetHandle
         ? [

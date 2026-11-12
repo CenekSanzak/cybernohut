@@ -24,6 +24,9 @@ pub struct Graph {
 pub enum GraphNode {
     /// A source of text typed by the user.
     Input { id: String, text: String },
+    /// A source of raw bytes. The bytes are too large to travel inside the graph
+    /// description, so they are handed to the engine separately, keyed by node id.
+    File { id: String },
     Op {
         id: String,
         op_id: String,
@@ -38,7 +41,7 @@ pub enum GraphNode {
 impl GraphNode {
     pub fn id(&self) -> &str {
         match self {
-            GraphNode::Input { id, .. } | GraphNode::Op { id, .. } => id,
+            GraphNode::Input { id, .. } | GraphNode::File { id } | GraphNode::Op { id, .. } => id,
         }
     }
 }
@@ -51,8 +54,11 @@ pub struct GraphEdge {
     pub target_port: String,
 }
 
-/// Name of the single output port of an input node.
+/// Name of the single output port of an input or file node.
 pub const INPUT_NODE_PORT: &str = "output";
+
+/// The bytes behind file nodes, by node id.
+pub type Sources = HashMap<String, Rc<Value>>;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Tsify)]
 #[serde(tag = "status", rename_all = "snake_case")]
@@ -122,7 +128,7 @@ impl Evaluation {
     }
 }
 
-pub fn evaluate(graph: &Graph) -> Evaluation {
+pub fn evaluate(graph: &Graph, sources: &Sources) -> Evaluation {
     let index: HashMap<&str, &GraphNode> = graph.nodes.iter().map(|n| (n.id(), n)).collect();
     let mut incoming: HashMap<&str, Vec<&GraphEdge>> = HashMap::new();
     let mut outgoing: HashMap<&str, Vec<&str>> = HashMap::new();
@@ -144,7 +150,7 @@ pub fn evaluate(graph: &Graph) -> Evaluation {
     let mut evaluation = Evaluation::default();
 
     while let Some(id) = queue.pop_front() {
-        let outcome = evaluate_node(index[id], incoming.get(id), &evaluation);
+        let outcome = evaluate_node(index[id], incoming.get(id), sources, &evaluation);
         evaluation.order.push(id.to_owned());
         evaluation.outcomes.insert(id.to_owned(), outcome);
         for target in outgoing.get(id).into_iter().flatten() {
@@ -171,11 +177,18 @@ pub fn evaluate(graph: &Graph) -> Evaluation {
 fn evaluate_node(
     node: &GraphNode,
     incoming: Option<&Vec<&GraphEdge>>,
+    sources: &Sources,
     done: &Evaluation,
 ) -> Outcome {
     let (op_id, config, per_line) = match node {
         GraphNode::Input { text, .. } => {
             return Outcome::Ok(vec![(INPUT_NODE_PORT.into(), Rc::new(Value::Text(text.clone())))]);
+        }
+        GraphNode::File { id } => {
+            return match sources.get(id) {
+                Some(bytes) => Outcome::Ok(vec![(INPUT_NODE_PORT.into(), bytes.clone())]),
+                None => Outcome::Error(OpError::invalid_input("No file loaded. Choose a file.")),
+            };
         }
         GraphNode::Op { op_id, config, per_line, .. } => (op_id, config, *per_line),
     };
@@ -325,12 +338,41 @@ fn render(value: &Value) -> String {
     }
 }
 
+/// The value as bytes, for saving to a file: text as UTF-8, bytes as they are, and
+/// anything else in its displayed form.
+pub fn to_bytes(value: &Value) -> Vec<u8> {
+    match value {
+        Value::Bytes(bytes) => bytes.clone(),
+        other => render(other).into_bytes(),
+    }
+}
+
+fn cut(text: &str, max_chars: usize) -> OutputText {
+    let (shown, truncated) = truncate_chars(text, max_chars);
+    OutputText { text: shown, total_chars: text.chars().count(), truncated }
+}
+
 /// The human-readable form of a value for the output panel, cut to `max_chars`.
+///
+/// Large values are cut before they are formatted: a hex dump is three characters per
+/// byte, so dumping a whole file only to throw most of it away could exhaust memory.
 pub fn display(value: &Value, max_chars: usize) -> OutputText {
-    let full = render(value);
-    let total_chars = full.chars().count();
-    let (text, truncated) = truncate_chars(&full, max_chars);
-    OutputText { text, total_chars, truncated }
+    match value {
+        Value::Text(text) => cut(text, max_chars),
+        Value::Bytes(bytes) => match std::str::from_utf8(bytes) {
+            Ok(text) => cut(text, max_chars),
+            Err(_) => {
+                let header = format!("Binary data ({} bytes):\n", bytes.len());
+                let shown = bytes.len().min(max_chars / 3);
+                OutputText {
+                    total_chars: header.len() + (bytes.len() * 3).saturating_sub(1),
+                    truncated: shown < bytes.len(),
+                    text: header + &hex(&bytes[..shown]),
+                }
+            }
+        },
+        other => cut(&render(other), max_chars),
+    }
 }
 
 #[cfg(test)]
@@ -373,7 +415,7 @@ mod tests {
             ],
             edges: vec![edge("caesar", "hash"), edge("in", "caesar")],
         };
-        let evaluation = evaluate(&graph);
+        let evaluation = evaluate(&graph, &Sources::new());
         assert_eq!(evaluation.order, ["in", "caesar", "hash"]);
         assert_eq!(text_of(&evaluation, "caesar"), "def");
         // `printf def | sha256sum`
@@ -399,7 +441,7 @@ mod tests {
                 edge_ports("reverse", "output", "both", "input2"),
             ],
         };
-        assert_eq!(text_of(&evaluate(&graph), "both"), "NOHUT+tuhoN");
+        assert_eq!(text_of(&evaluate(&graph, &Sources::new()), "both"), "NOHUT+tuhoN");
     }
 
     #[test]
@@ -412,7 +454,7 @@ mod tests {
             ],
             edges: vec![edge("in", "decode"), edge("decode", "upper")],
         };
-        let evaluation = evaluate(&graph);
+        let evaluation = evaluate(&graph, &Sources::new());
         let Outcome::Error(error) = &evaluation.outcomes["upper"] else { panic!("expected an error") };
         assert_eq!(error.code, ErrorCode::TypeMismatch);
         assert!(error.message.contains("Decode Text (UTF-8)"));
@@ -429,7 +471,7 @@ mod tests {
             ],
             edges: vec![edge("in", "decode"), edge("decode", "text"), edge("text", "upper")],
         };
-        assert_eq!(text_of(&evaluate(&graph), "upper"), "HELLO");
+        assert_eq!(text_of(&evaluate(&graph, &Sources::new()), "upper"), "HELLO");
     }
 
     #[test]
@@ -443,16 +485,42 @@ mod tests {
             ],
             edges: vec![edge("in", "decode"), edge("decode", "after"), edge("in", "other")],
         };
-        let evaluation = evaluate(&graph);
+        let evaluation = evaluate(&graph, &Sources::new());
         assert!(matches!(evaluation.outcomes["decode"], Outcome::Error(_)));
         assert!(matches!(evaluation.outcomes["after"], Outcome::Blocked));
         assert_eq!(text_of(&evaluation, "other"), "!!!");
     }
 
+    fn file_graph() -> Graph {
+        Graph {
+            nodes: vec![GraphNode::File { id: "file".into() }, op("hash", "sha256", json!({}))],
+            edges: vec![edge("file", "hash")],
+        }
+    }
+
+    #[test]
+    fn a_file_node_feeds_its_bytes_into_the_graph() {
+        let mut sources = Sources::new();
+        sources.insert("file".into(), Rc::new(Value::Bytes(b"abc".to_vec())));
+        let evaluation = evaluate(&file_graph(), &sources);
+        assert_eq!(
+            text_of(&evaluation, "hash"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+        assert_eq!(to_bytes(evaluation.output("file", "output").unwrap()), b"abc");
+    }
+
+    #[test]
+    fn a_file_node_without_bytes_is_an_error_and_blocks_downstream() {
+        let evaluation = evaluate(&file_graph(), &Sources::new());
+        assert!(matches!(evaluation.outcomes["file"], Outcome::Error(_)));
+        assert!(matches!(evaluation.outcomes["hash"], Outcome::Blocked));
+    }
+
     #[test]
     fn an_unconnected_input_port_waits() {
         let graph = Graph { nodes: vec![op("lonely", "reverse", json!({}))], edges: vec![] };
-        assert!(matches!(evaluate(&graph).outcomes["lonely"], Outcome::Waiting));
+        assert!(matches!(evaluate(&graph, &Sources::new()).outcomes["lonely"], Outcome::Waiting));
     }
 
     #[test]
@@ -461,7 +529,7 @@ mod tests {
             nodes: vec![op("a", "reverse", json!({})), op("b", "reverse", json!({}))],
             edges: vec![edge("a", "b"), edge("b", "a")],
         };
-        let evaluation = evaluate(&graph);
+        let evaluation = evaluate(&graph, &Sources::new());
         assert!(matches!(evaluation.outcomes["a"], Outcome::Error(_)));
         assert!(matches!(evaluation.outcomes["b"], Outcome::Error(_)));
     }
@@ -474,7 +542,7 @@ mod tests {
         }
         let graph = Graph { nodes: vec![input("in", "a\nb"), node], edges: vec![edge("in", "hash")] };
         assert_eq!(
-            text_of(&evaluate(&graph), "hash"),
+            text_of(&evaluate(&graph, &Sources::new()), "hash"),
             "0cc175b9c0f1b6a831c399e269772661\n92eb5ffee6ae2fec3ad71c777531578f"
         );
     }
@@ -491,7 +559,7 @@ mod tests {
             edges: vec![edge("in", "decode"), edge("decode", "hash")],
         };
         assert_eq!(
-            text_of(&evaluate(&graph), "hash"),
+            text_of(&evaluate(&graph, &Sources::new()), "hash"),
             "0cc175b9c0f1b6a831c399e269772661\n92eb5ffee6ae2fec3ad71c777531578f"
         );
     }
@@ -507,7 +575,7 @@ mod tests {
             nodes: vec![input("in", "b2sK/w=="), op("raw", "base64-standard-decode", json!({})), decode],
             edges: vec![edge("in", "raw"), edge("raw", "decode")],
         };
-        let evaluation = evaluate(&graph);
+        let evaluation = evaluate(&graph, &Sources::new());
         let Outcome::Error(error) = &evaluation.outcomes["decode"] else { panic!("expected an error") };
         assert!(error.message.starts_with("Line 2:"), "{}", error.message);
     }
@@ -518,7 +586,7 @@ mod tests {
             nodes: vec![input("in", "one two"), op("stats", "text-stats", json!({}))],
             edges: vec![edge("in", "stats")],
         };
-        let evaluation = evaluate(&graph);
+        let evaluation = evaluate(&graph, &Sources::new());
         assert_eq!(evaluation.output("stats", "wordCount"), Some(&Value::Number(2.0)));
         assert_eq!(evaluation.output("stats", "charCount"), Some(&Value::Number(7.0)));
     }
@@ -531,9 +599,19 @@ mod tests {
     }
 
     #[test]
+    fn binary_output_is_dumped_only_as_far_as_it_is_shown() {
+        let shown = display(&Value::Bytes(vec![0xff; 1000]), 30);
+        assert_eq!(shown.text, format!("Binary data (1000 bytes):\n{}", ["ff"; 10].join(" ")));
+        assert!(shown.truncated);
+        let whole = display(&Value::Bytes(vec![0xff; 4]), 30);
+        assert_eq!(whole.text, "Binary data (4 bytes):\nff ff ff ff");
+        assert_eq!((whole.total_chars, whole.truncated), (whole.text.len(), false));
+    }
+
+    #[test]
     fn previews_are_truncated_on_character_boundaries() {
         let graph = Graph { nodes: vec![input("in", "çççççç")], edges: vec![] };
-        let report = evaluate(&graph).report(3);
+        let report = evaluate(&graph, &Sources::new()).report(3);
         let NodeReport::Ok { outputs, .. } = &report[0] else { panic!("expected ok") };
         assert_eq!(outputs[0].preview, "ççç");
         assert!(outputs[0].truncated);

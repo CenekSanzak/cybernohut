@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { engine } from "@/engine/client";
 import { catalog, isOpId } from "@/engine/wasm";
 import { GraphDispatchContext, ReportsContext } from "@/graph/context";
-import { nodeTitle } from "@/graph/model";
+import { saveBytes } from "@/graph/files";
+import { nodeTitle, outputPorts } from "@/graph/model";
 import {
   clearStorage,
   loadFromStorage,
@@ -25,8 +27,16 @@ const INPUT_ITEM: SidebarItem = {
   tags: ["I/O"],
 };
 
+const FILE_ITEM: SidebarItem = {
+  id: "file",
+  name: "File",
+  description: "A file whose bytes start a flow",
+  tags: ["I/O"],
+};
+
 const sidebarItems: SidebarItem[] = [
   INPUT_ITEM,
+  FILE_ITEM,
   ...catalog.map((meta) => ({
     id: meta.id,
     name: meta.name,
@@ -55,6 +65,13 @@ const Workspace: React.FC = () => {
     return () => clearTimeout(timer);
   }, [state]);
 
+  // The engine keeps a file's bytes until its node is gone.
+  useEffect(() => {
+    engine.retainSources(
+      state.nodes.filter((node) => node.data.kind === "file").map((node) => node.id)
+    );
+  }, [state.nodes]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") dispatch({ type: "SELECT", nodeId: "" });
@@ -65,7 +82,7 @@ const Workspace: React.FC = () => {
 
   const handleOperationSelect = useCallback((item: SidebarItem) => {
     if (isOpId(item.id)) dispatch({ type: "ADD_OP", opId: item.id });
-    else dispatch({ type: "ADD_INPUT" });
+    else dispatch({ type: item.id === FILE_ITEM.id ? "ADD_FILE" : "ADD_INPUT" });
   }, []);
 
   const handleClear = useCallback(() => {
@@ -117,6 +134,16 @@ const Workspace: React.FC = () => {
     }
   }, [selectedNode, reports, selectedOutput, evaluation.error]);
 
+  const selectedReport = selectedNode && reports.get(selectedNode.id);
+  const downloadable = selectedReport?.status === "ok" ? selectedReport.outputs[0] : undefined;
+  const handleDownload = useCallback(async () => {
+    if (!selectedNode || !downloadable) return;
+    const bytes = await engine.outputBytes(selectedNode.id, outputPorts(selectedNode.data)[0].name);
+    if (bytes) {
+      saveBytes(bytes, `${selectedNode.id}.${downloadable.type === "bytes" ? "bin" : "txt"}`);
+    }
+  }, [selectedNode, downloadable]);
+
   const status = evaluation.running
     ? "Calculating…"
     : evaluation.elapsedMs !== null
@@ -154,6 +181,7 @@ const Workspace: React.FC = () => {
                     input={inputText}
                     output={output}
                     status={status}
+                    onDownload={downloadable && handleDownload}
                     onInputChange={handleInputChange}
                     calculate={run}
                     autoCalculate={autoCalculate}

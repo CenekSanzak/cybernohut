@@ -1,6 +1,11 @@
 /// The engine worker: owns the wasm instance that evaluates graphs and holds their values.
 import * as wasm from "wasm";
-import type { EngineReady, EngineRequest, EngineResponse } from "./protocol";
+import type {
+  EngineNotice,
+  EngineReady,
+  EngineRequest,
+  EngineResponse,
+} from "./protocol";
 
 /** How many characters of each output a node shows. */
 const PREVIEW_CHARS = 60;
@@ -25,23 +30,41 @@ function handle(request: EngineRequest): EngineResponse {
         id: request.id,
         output: wasm.output_text(request.nodeId, request.port, OUTPUT_CHARS),
       };
+    case "bytes":
+      return {
+        type: "bytes",
+        id: request.id,
+        bytes: wasm.output_bytes(request.nodeId, request.port),
+      };
   }
 }
 
-self.onmessage = (event: MessageEvent<EngineRequest>) => {
+self.onmessage = (event: MessageEvent<EngineRequest | EngineNotice>) => {
+  const message = event.data;
+  if (message.type === "set_source") {
+    wasm.set_source(message.nodeId, message.bytes);
+    return;
+  }
+  if (message.type === "retain_sources") {
+    wasm.retain_sources(message.nodeIds);
+    return;
+  }
+
   let response: EngineResponse;
   try {
-    response = handle(event.data);
+    response = handle(message);
   } catch (error) {
     // A wasm trap (typically running out of memory) leaves the instance unusable; the
     // page replaces this worker when it sees a failure.
     response = {
       type: "failed",
-      id: event.data.id,
+      id: message.id,
       message: error instanceof Error ? error.message : String(error),
     };
   }
-  self.postMessage(response);
+  // Hand large results over instead of copying them a second time.
+  const transfer = response.type === "bytes" && response.bytes ? [response.bytes.buffer] : [];
+  self.postMessage(response, { transfer });
 };
 
 self.postMessage({ type: "ready" } satisfies EngineReady);

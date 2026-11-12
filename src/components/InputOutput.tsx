@@ -13,6 +13,8 @@ interface InputOutputProps {
   input: string;
   output: string;
   status: string;
+  /** Saves the selected output; absent when there is nothing to save. */
+  onDownload?: () => void;
   onInputChange: (value: string) => void;
   calculate: () => void;
   autoCalculate: boolean;
@@ -29,6 +31,7 @@ const InputOutput = React.memo<InputOutputProps>(
     input,
     output,
     status,
+    onDownload,
     onInputChange,
     calculate,
     autoCalculate,
@@ -123,8 +126,18 @@ const InputOutput = React.memo<InputOutputProps>(
             </div>
           </h3>
           {selectedNodeId && (
-            <div className="text-sm text-gray-700 mb-2">
-              {selectedNodeTitle} ({selectedNodeId}):
+            <div className="text-sm text-gray-700 mb-2 flex items-center justify-between gap-2">
+              <span>
+                {selectedNodeTitle} ({selectedNodeId}):
+              </span>
+              <button
+                type="button"
+                onClick={onDownload}
+                disabled={!onDownload}
+                className="px-2 py-0.5 text-xs border rounded bg-white hover:bg-gray-100 disabled:opacity-50"
+              >
+                Download
+              </button>
             </div>
           )}
           <Textarea

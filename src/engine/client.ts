@@ -6,7 +6,12 @@
  * of queueing behind it. The same replacement recovers from a crashed engine.
  */
 import type { Graph, NodeReport, OutputText } from "wasm";
-import type { EngineReady, EngineRequest, EngineResponse } from "./protocol";
+import type {
+  EngineNotice,
+  EngineReady,
+  EngineRequest,
+  EngineResponse,
+} from "./protocol";
 
 /** Rejection for a request that was abandoned in favour of a newer one. */
 export class Superseded extends Error {
@@ -33,6 +38,11 @@ class Engine {
   private evaluating = false;
   private markReady = () => {};
   private ready = Promise.resolve();
+  /**
+   * The content of file nodes. The worker holds its own copy; this one exists so a
+   * replacement worker can be given the files again.
+   */
+  private sources = new Map<string, Uint8Array>();
   private worker = this.spawn();
 
   private spawn(): Worker {
@@ -54,7 +64,33 @@ class Engine {
       }
     };
     worker.onerror = (event) => this.replace(new Error(event.message || "The engine crashed"));
+    for (const [nodeId, bytes] of this.sources) {
+      this.notify({ type: "set_source", nodeId, bytes }, worker);
+    }
     return worker;
+  }
+
+  /** Posts once the worker is ready, unless it has been replaced in the meantime. */
+  private notify(notice: EngineNotice, worker = this.worker): void {
+    void this.ready.then(() => {
+      if (worker === this.worker) worker.postMessage(notice);
+    });
+  }
+
+  /** Gives the engine the content of a file node. */
+  setSource(nodeId: string, bytes: Uint8Array): void {
+    this.sources.set(nodeId, bytes);
+    this.notify({ type: "set_source", nodeId, bytes });
+  }
+
+  /** Frees the content of every file node that is not listed. */
+  retainSources(nodeIds: string[]): void {
+    const keep = new Set(nodeIds);
+    let dropped = false;
+    for (const nodeId of this.sources.keys()) {
+      if (!keep.has(nodeId)) dropped = this.sources.delete(nodeId) || dropped;
+    }
+    if (dropped) this.notify({ type: "retain_sources", nodeIds });
   }
 
   /** Stops the current worker, failing whatever it was doing, and starts a fresh one. */
@@ -100,6 +136,13 @@ class Engine {
     const response = await this.request({ type: "output", nodeId, port });
     if (response.type !== "output") throw new Error("Unexpected engine response");
     return response.output;
+  }
+
+  /** The complete output of a node from the most recent evaluation, for saving. */
+  async outputBytes(nodeId: string, port: string): Promise<Uint8Array | undefined> {
+    const response = await this.request({ type: "bytes", nodeId, port });
+    if (response.type !== "bytes") throw new Error("Unexpected engine response");
+    return response.bytes;
   }
 }
 

@@ -8,17 +8,21 @@
 //!   JavaScript copies one out only when it has to show it.
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use tsify::Ts;
 use wasm_bindgen::prelude::*;
 
-use crate::core::{OpMeta, ValueType};
-use crate::graph::{self, Evaluation, Graph, NodeReport, OutputText};
+use crate::core::{OpMeta, Value, ValueType};
+use crate::graph::{self, Evaluation, Graph, NodeReport, OutputText, Sources};
 use crate::ops;
 
 thread_local! {
     /// The most recent evaluation. Replacing it frees the previous one's values.
     static LAST: RefCell<Evaluation> = RefCell::new(Evaluation::default());
+    /// The bytes behind file nodes. They outlive evaluations, so a file is copied into
+    /// wasm memory once, not on every run.
+    static SOURCES: RefCell<Sources> = RefCell::new(Sources::new());
 }
 
 fn to_js_error(error: impl std::fmt::Display) -> JsError {
@@ -49,7 +53,7 @@ pub fn can_connect(from: Ts<ValueType>, to: Ts<ValueType>) -> Result<bool, JsErr
 #[wasm_bindgen]
 pub fn evaluate(graph: Ts<Graph>, preview_chars: usize) -> Result<Vec<Ts<NodeReport>>, JsError> {
     let graph = graph.to_rust().map_err(to_js_error)?;
-    let evaluation = graph::evaluate(&graph);
+    let evaluation = SOURCES.with(|sources| graph::evaluate(&graph, &sources.borrow()));
     let reports = evaluation
         .report(preview_chars)
         .iter()
@@ -69,4 +73,22 @@ pub fn output_text(node_id: &str, port: &str, max_chars: usize) -> Result<Option
             .map(|value| Ts::from_rust(&graph::display(value, max_chars)).map_err(to_js_error))
             .transpose()
     })
+}
+
+/// Stores the content of a file node.
+#[wasm_bindgen]
+pub fn set_source(node_id: String, bytes: Vec<u8>) {
+    SOURCES.with(|sources| sources.borrow_mut().insert(node_id, Rc::new(Value::Bytes(bytes))));
+}
+
+/// Drops the content of every file node that is not in `node_ids`.
+#[wasm_bindgen]
+pub fn retain_sources(node_ids: Vec<String>) {
+    SOURCES.with(|sources| sources.borrow_mut().retain(|id, _| node_ids.contains(id)));
+}
+
+/// The complete output of a node from the last evaluation, as bytes to save.
+#[wasm_bindgen]
+pub fn output_bytes(node_id: &str, port: &str) -> Option<Vec<u8>> {
+    LAST.with(|last| last.borrow().output(node_id, port).map(graph::to_bytes))
 }

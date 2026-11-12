@@ -54,7 +54,9 @@ export function validateOperationInputs(
       const dataValue = isDataValue(value) ? value : legacyToDataValue(value);
       const expectedType = operation.inputTypes[index].type;
 
-      if (dataValue.type !== expectedType) {
+      // Text feeds a binary port as its UTF-8 bytes; the engine does the conversion.
+      const coercible = expectedType === "binary" && dataValue.type === "text";
+      if (dataValue.type !== expectedType && !coercible) {
         throw new Error(
           `Input ${index}: expected ${expectedType}, got ${dataValue.type}`
         );
@@ -102,6 +104,18 @@ export function createDataValueOutputValues(
 }
 
 /**
+ * Bytes are shown as text when they happen to be valid UTF-8. This only affects what is
+ * displayed; the value keeps its binary type.
+ */
+function decodeUtf8(bytes: Uint8Array): string | null {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Formats DataValue for display in the UI (short version for nodes)
  */
 export function formatDataValueForDisplay(dataValue: DataValue): string {
@@ -113,8 +127,11 @@ export function formatDataValueForDisplay(dataValue: DataValue): string {
       );
     case "number":
       return dataValue.value.toString();
-    case "binary":
-      return `[Binary: ${dataValue.value.length} bytes]`;
+    case "binary": {
+      const text = decodeUtf8(dataValue.value);
+      if (text === null) return `[Binary: ${dataValue.value.length} bytes]`;
+      return text.slice(0, 30) + (text.length > 30 ? "..." : "");
+    }
     case "text_array":
       return `[${dataValue.value.length} items]`;
     case "number_array":
@@ -134,11 +151,14 @@ export function formatDataValueForOutput(dataValue: DataValue): string {
     case "number":
       return dataValue.value.toString();
     case "binary":
-      return `Binary Data (${dataValue.value.length} bytes):\n${Array.from(
-        dataValue.value
-      )
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join(" ")}`;
+      return (
+        decodeUtf8(dataValue.value) ??
+        `Binary Data (${dataValue.value.length} bytes):\n${Array.from(
+          dataValue.value
+        )
+          .map((b) => b.toString(16).padStart(2, "0"))
+          .join(" ")}`
+      );
     case "text_array":
       return `Text Array (${dataValue.value.length} items):\n${dataValue.value
         .map((item, index) => `${index}: "${item}"`)

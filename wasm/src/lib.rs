@@ -1,6 +1,9 @@
-mod utils;
+mod api;
+pub mod core;
+pub mod ops;
 mod string_ops;
-mod cipher;
+mod utils;
+
 use utils::set_panic_hook;
 use wasm_bindgen::prelude::*;
 

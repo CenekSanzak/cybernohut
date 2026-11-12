@@ -9,13 +9,6 @@ import {
   Base32Decode,
   Base85Encode,
   Base85Decode,
-  Base64StandardEncode,
-  Base64StandardDecode,
-  Base64UrlEncode,
-  Base64UrlDecode,
-  Md5,
-  Sha1,
-  Sha256,
   SliceText,
 } from "./string";
 import {
@@ -25,12 +18,15 @@ import {
   ConcatenateText,
   TextStats,
 } from "./string/advanced";
-import { CaesarCipher, ROT13 } from "./cipher";
 import { Input } from "./io";
+import { catalogOperations } from "./from-catalog";
 import { Operation } from "./types";
 
 export const operations: Operation[] = [
   Input,
+  // Defined in Rust; see wasm/src/ops.
+  ...catalogOperations,
+  // Still hand-written in TypeScript, waiting to be moved.
   Reverse,
   RemoveSpaces,
   Lowercase,
@@ -41,15 +37,6 @@ export const operations: Operation[] = [
   Base32Decode,
   Base85Encode,
   Base85Decode,
-  Base64StandardEncode,
-  Base64StandardDecode,
-  Base64UrlEncode,
-  Base64UrlDecode,
-  Md5,
-  Sha1,
-  Sha256,
-  CaesarCipher,
-  ROT13,
   SliceText,
   CountWords,
   SplitText,

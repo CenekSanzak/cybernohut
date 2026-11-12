@@ -11,10 +11,6 @@ import {
   decode_base32,
   encode_base85,
   decode_base85,
-  encode_base64_standard,
-  decode_base64_standard,
-  encode_base64_url,
-  decode_base64_url,
   build_base16_encoder,
 } from "wasm";
 import {
@@ -110,62 +106,6 @@ export const Base85Decode: Operation = {
   link: "https://en.wikipedia.org/wiki/Ascii85",
   value: "",
   func: wasmTextToText(decode_base85),
-  inputTypes: [{ type: "text", value: "" }],
-  outputTypes: [{ type: "text", value: "" }],
-  tags: [OperationTags.Encoding, OperationTags.All],
-  inputs: { input: IOTypes.Text },
-  outputs: { output: IOTypes.Text },
-};
-
-export const Base64StandardEncode: Operation = {
-  name: "Base64 Standard Encode",
-  id: "base64-standard-encode",
-  description: "Encodes the input string to Base64 (standard)",
-  link: "https://en.wikipedia.org/wiki/Base64",
-  value: "",
-  func: wasmTextToText(encode_base64_standard),
-  inputTypes: [{ type: "text", value: "" }],
-  outputTypes: [{ type: "text", value: "" }],
-  tags: [OperationTags.Encoding, OperationTags.All],
-  inputs: { input: IOTypes.Text },
-  outputs: { output: IOTypes.Text },
-};
-
-export const Base64StandardDecode: Operation = {
-  name: "Base64 Standard Decode",
-  id: "base64-standard-decode",
-  description: "Decodes a Base64 encoded string (standard)",
-  link: "https://en.wikipedia.org/wiki/Base64",
-  value: "",
-  func: wasmTextToText(decode_base64_standard),
-  inputTypes: [{ type: "text", value: "" }],
-  outputTypes: [{ type: "text", value: "" }],
-  tags: [OperationTags.Encoding, OperationTags.All],
-  inputs: { input: IOTypes.Text },
-  outputs: { output: IOTypes.Text },
-};
-
-export const Base64UrlEncode: Operation = {
-  name: "Base64 URL-safe Encode",
-  id: "base64-url-encode",
-  description: "Encodes the input string to Base64 (URL-safe)",
-  link: "https://en.wikipedia.org/wiki/Base64#URL_applications",
-  value: "",
-  func: wasmTextToText(encode_base64_url),
-  inputTypes: [{ type: "text", value: "" }],
-  outputTypes: [{ type: "text", value: "" }],
-  tags: [OperationTags.Encoding, OperationTags.All],
-  inputs: { input: IOTypes.Text },
-  outputs: { output: IOTypes.Text },
-};
-
-export const Base64UrlDecode: Operation = {
-  name: "Base64 URL-safe Decode",
-  id: "base64-url-decode",
-  description: "Decodes a Base64 encoded string (URL-safe)",
-  link: "https://en.wikipedia.org/wiki/Base64#URL_applications",
-  value: "",
-  func: wasmTextToText(decode_base64_url),
   inputTypes: [{ type: "text", value: "" }],
   outputTypes: [{ type: "text", value: "" }],
   tags: [OperationTags.Encoding, OperationTags.All],

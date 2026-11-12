@@ -184,7 +184,8 @@ function addChain(state: GraphState, anchorId: string, steps: ChainStep[]): Grap
       });
     }
     previous = node;
-    position = { x: position.x, y: position.y + 170 };
+    // Room for a node with a note and a setting or two; nodes are measured only later.
+    position = { x: position.x, y: position.y + 210 };
   }
   return next;
 }

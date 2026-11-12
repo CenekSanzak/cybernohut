@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Download, Upload, Share2, Trash2 } from "lucide-react";
+import { Download, Play, Upload, Share2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   deserialize,
@@ -14,12 +14,19 @@ interface GraphControlsProps {
   state: GraphSnapshot;
   onImport: (snapshot: GraphSnapshot) => void;
   onClear: () => void;
+  autoCalculate: boolean;
+  onAutoCalculateChange: (enabled: boolean) => void;
+  /** Runs the graph once; used when auto-calculate is off. */
+  onRun: () => void;
 }
 
 export const GraphControls: React.FC<GraphControlsProps> = ({
   state,
   onImport,
   onClear,
+  autoCalculate,
+  onAutoCalculateChange,
+  onRun,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -102,7 +109,7 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
   };
 
   return (
-    <div className="flex items-center gap-2 p-2 bg-white border-b border-gray-200">
+    <div className="flex flex-wrap items-center gap-2 border-b bg-white p-2">
       <Button
         variant="outline"
         size="sm"
@@ -152,12 +159,28 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
         Clear
       </Button>
 
-      <a
-        href="bench.html"
-        className="ml-auto text-sm text-gray-600 underline hover:text-gray-900"
-      >
-        Benchmark
-      </a>
+      <div className="ml-auto flex items-center gap-3">
+        {!autoCalculate && (
+          <Button size="sm" onClick={onRun}>
+            <Play size={16} />
+            Run
+          </Button>
+        )}
+        <label
+          className="flex items-center gap-2 text-sm"
+          title="Re-run the graph whenever it changes. Turn off for very large inputs."
+        >
+          <input
+            type="checkbox"
+            checked={autoCalculate}
+            onChange={(event) => onAutoCalculateChange(event.target.checked)}
+          />
+          Auto-calculate
+        </label>
+        <a href="bench.html" className="text-sm text-muted-foreground underline hover:text-foreground">
+          Benchmark
+        </a>
+      </div>
     </div>
   );
 };

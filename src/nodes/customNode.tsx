@@ -35,28 +35,36 @@ const typeLabel: Record<ValueType, string> = {
   number_list: "number list",
 };
 
+/**
+ * A row of connection points. Colour carries the type; the name is written out only
+ * when a node has several ports on one side and they need telling apart.
+ */
 function Ports({ ports, side }: { ports: readonly Port[]; side: "input" | "output" }) {
   return ports.map((port, index) => {
     const left = `${(100 / ports.length) * (index + 0.5)}%`;
     const isInput = side === "input";
+    const description = `${isInput ? "Input" : "Output"} ${port.name}: ${typeLabel[port.type]}`;
     return (
       <Handle
         key={port.name}
         id={port.name}
         type={isInput ? "target" : "source"}
         position={isInput ? Position.Top : Position.Bottom}
-        style={{ background: typeColor[port.type], left }}
-        aria-label={`${isInput ? "Input" : "Output"} ${port.name} of type ${typeLabel[port.type]}`}
+        style={{ background: typeColor[port.type], left, width: 10, height: 10 }}
+        title={description}
+        aria-label={description}
       >
-        <span
-          className="absolute whitespace-nowrap text-[10px]"
-          style={{
-            color: typeColor[port.type],
-            transform: isInput ? "translate(-50%, -110%)" : "translate(-50%, 20%)",
-          }}
-        >
-          {port.name} ({typeLabel[port.type]})
-        </span>
+        {ports.length > 1 && (
+          <span
+            className="pointer-events-none absolute whitespace-nowrap text-[10px]"
+            style={{
+              color: typeColor[port.type],
+              transform: isInput ? "translate(-50%, -120%)" : "translate(-50%, 60%)",
+            }}
+          >
+            {port.name}
+          </span>
+        )}
       </Handle>
     );
   });
@@ -117,7 +125,7 @@ function ParamInput({
       return (
         <input
           type="text"
-          className="nodrag w-24 px-1 border rounded"
+          className="nodrag w-28 rounded border px-1"
           value={String(value)}
           onChange={(e) => set(e.target.value)}
           aria-label={label}
@@ -133,7 +141,7 @@ function Settings({ nodeId, data }: { nodeId: string; data: OpNodeData }) {
   const config = configOf(data);
 
   return (
-    <div className="mt-2 border-t pt-2 space-y-1 text-xs">
+    <div className="mt-2 space-y-1 border-t pt-2">
       {meta.params.map((spec) => (
         <label key={spec.key} className="flex items-center justify-between gap-2">
           {spec.label}
@@ -142,7 +150,7 @@ function Settings({ nodeId, data }: { nodeId: string; data: OpNodeData }) {
       ))}
       {meta.supports_per_line && (
         <label
-          className="flex items-center justify-between gap-2 text-gray-600"
+          className="flex items-center justify-between gap-2 text-muted-foreground"
           title="Apply the operation to each line separately"
         >
           Line by line
@@ -166,7 +174,7 @@ function FilePicker({ nodeId, data }: { nodeId: string; data: FileNodeData }) {
   const input = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="mt-2 border-t pt-2 text-xs">
+    <div className="mt-2 border-t pt-2">
       {data.name && (
         <div className="mb-1 text-gray-600 break-all">
           {data.name} ({formatBytes(data.size)})
@@ -207,39 +215,50 @@ function Result({ report }: { report: NodeReport | undefined }) {
       ));
     case "error":
       return (
-        <div className="text-red-600" role="alert">
+        <div className="font-sans text-destructive" role="alert">
           {report.error.message}
         </div>
       );
     case "waiting":
-      return <div className="text-gray-400">Not connected</div>;
+      return <div className="font-sans text-muted-foreground">Not connected</div>;
     case "blocked":
-      return <div className="text-gray-400">Waiting for an earlier step</div>;
+      return <div className="font-sans text-muted-foreground">Waiting for an earlier step</div>;
   }
 }
 
 const CustomNode = ({ id, data, selected }: NodeProps<GraphNode>) => {
   const report = useContext(ReportsContext).get(id);
   const failed = report?.status === "error";
+  const outputs = outputPorts(data);
 
   return (
     <div
-      className={`p-4 border rounded shadow-md max-w-64 cursor-pointer hover:bg-gray-50 ${
-        data.kind === "op" ? "bg-white" : "bg-gray-50"
-      } ${failed ? "border-red-500 border-2" : selected ? "border-blue-500 border-2" : ""}`}
+      className={`w-60 cursor-pointer rounded-md border bg-white p-3 text-xs shadow-sm ${
+        failed ? "border-destructive" : selected ? "border-blue-500" : "border-border"
+      } ${failed || selected ? "ring-1" : ""} ${failed ? "ring-destructive" : "ring-blue-500"}`}
+      title={id}
     >
       <Ports ports={inputPorts(data)} side="input" />
-      <strong>{nodeTitle(data)}</strong>
-      <div className="text-[10px] text-gray-600 -mt-1">{id}</div>
-      <div className="mt-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <strong className="text-sm">{nodeTitle(data)}</strong>
+        {outputs.length === 1 && (
+          <span className="shrink-0 text-[10px]" style={{ color: typeColor[outputs[0].type] }}>
+            {typeLabel[outputs[0].type]}
+          </span>
+        )}
+      </div>
+      <div className="mt-1 font-mono">
         <Result report={report} />
       </div>
       {data.kind === "op" && data.note && (
-        <div className="mt-2 text-[11px] italic text-indigo-700">Suggested: {data.note}</div>
+        <div className="mt-2 border-l-2 border-gray-300 pl-2 text-[11px] text-muted-foreground">
+          <span className="font-medium">Why: </span>
+          {data.note}
+        </div>
       )}
       {data.kind === "op" && <Settings nodeId={id} data={data} />}
       {data.kind === "file" && <FilePicker nodeId={id} data={data} />}
-      <Ports ports={outputPorts(data)} side="output" />
+      <Ports ports={outputs} side="output" />
     </div>
   );
 };

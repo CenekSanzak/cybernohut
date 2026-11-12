@@ -42,9 +42,7 @@ export const GraphCanvas = React.memo<GraphCanvasProps>(({ nodes, edges }) => {
   );
 
   return (
-    <div className="h-full flex flex-col">
-      <h2 className="text-xl font-bold mb-4">Selected Operations</h2>
-      <div className="flex-1 min-h-0">
+    <div className="h-full" aria-label="Operation graph">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -58,14 +56,15 @@ export const GraphCanvas = React.memo<GraphCanvasProps>(({ nodes, edges }) => {
           onConnect={(connection: Connection) => dispatch({ type: "CONNECT", connection })}
           onNodeClick={(_, node) => dispatch({ type: "SELECT", nodeId: node.id })}
           isValidConnection={isValidConnection}
-          defaultViewport={{ x: 0, y: 0, zoom: 1.2 }}
+          fitView
+          fitViewOptions={{ maxZoom: 1, padding: 0.2 }}
+          defaultEdgeOptions={{ style: { strokeWidth: 1.5 } }}
           proOptions={{ hideAttribution: true }}
         >
-          <Background variant={BackgroundVariant.Dots} gap={12} size={1} />
+          <Background variant={BackgroundVariant.Dots} gap={16} size={1} />
           <Controls />
-          <MiniMap />
+          <MiniMap className="max-lg:hidden" pannable zoomable nodeColor="#94a3b8" nodeStrokeWidth={0} />
         </ReactFlow>
-      </div>
     </div>
   );
 });

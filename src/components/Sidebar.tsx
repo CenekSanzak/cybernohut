@@ -63,8 +63,14 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
   }, [operations]);
 
   return (
-    <div className="w-64 bg-white shadow-md p-4 h-screen overflow-y-auto">
-      <h2 className="text-xl font-bold mb-4">Operations</h2>
+    <nav
+      className="h-full w-60 shrink-0 overflow-y-auto border-r bg-white p-4"
+      aria-label="Operations"
+    >
+      <h1 className="text-lg font-bold">Cyber Nohut</h1>
+      <h2 className="mb-3 mt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Operations
+      </h2>
 
       <div className="relative mb-4">
         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-600" />
@@ -129,9 +135,12 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
           <Button
             variant="ghost"
             className="w-full justify-between font-semibold"
+            aria-expanded={expandedTags.includes(tag)}
             onClick={() => toggleTag(tag)}
           >
-            {tag}
+            <span>
+              {tag} <span className="font-normal text-muted-foreground">{ops.length}</span>
+            </span>
             {expandedTags.includes(tag) ? (
               <ChevronDown className="h-4 w-4" />
             ) : (
@@ -139,7 +148,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
             )}
           </Button>
           {expandedTags.includes(tag) && (
-            <div className="ml-4 mt-2 space-y-2">
+            <div className="ml-3 mt-1 space-y-0.5">
               {ops.map((op) => (
                 <TooltipProvider key={op.id}>
                   <Tooltip delayDuration={200}>
@@ -180,7 +189,7 @@ const Sidebar: React.FC<SidebarProps> = ({ operations, onOperationSelect }) => {
           )}
         </div>
       ))}
-    </div>
+    </nav>
   );
 };
 

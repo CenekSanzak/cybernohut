@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use data_encoding::{Encoding, BASE32, HEXLOWER, HEXLOWER_PERMISSIVE, HEXUPPER};
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
@@ -5,8 +7,13 @@ use tsify::Tsify;
 use crate::core::{NoConfig, Op, OpError, ParamKind, ParamSpec, Tag};
 
 /// Encoded data is routinely wrapped or padded with whitespace; it carries no meaning.
-fn compact(input: &str) -> String {
-    input.chars().filter(|c| !c.is_ascii_whitespace()).collect()
+/// Borrows the input unless there is whitespace to strip.
+fn compact(input: &str) -> Cow<'_, str> {
+    if input.bytes().any(|byte| byte.is_ascii_whitespace()) {
+        Cow::Owned(input.chars().filter(|c| !c.is_ascii_whitespace()).collect())
+    } else {
+        Cow::Borrowed(input)
+    }
 }
 
 /// `data-encoding` asserts that the input is shorter than `usize::MAX / 512`, which on

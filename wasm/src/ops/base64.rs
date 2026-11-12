@@ -6,10 +6,14 @@ use crate::core::{NoConfig, Op, OpError, Tag};
 
 fn decode(engine: &GeneralPurpose, input: &str) -> Result<Vec<u8>, OpError> {
     // Encoded data is routinely wrapped or padded with whitespace; it carries no meaning.
-    let compact: String = input.chars().filter(|c| !c.is_ascii_whitespace()).collect();
-    engine
-        .decode(compact)
-        .map_err(|e| OpError::invalid_input(format!("Not valid Base64: {e}")))
+    // Copying the input to strip it is only worth it when there is some.
+    let decoded = if input.bytes().any(|byte| byte.is_ascii_whitespace()) {
+        let compact: Vec<u8> = input.bytes().filter(|byte| !byte.is_ascii_whitespace()).collect();
+        engine.decode(compact)
+    } else {
+        engine.decode(input)
+    };
+    decoded.map_err(|e| OpError::invalid_input(format!("Not valid Base64: {e}")))
 }
 
 macro_rules! base64_ops {

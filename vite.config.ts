@@ -28,6 +28,12 @@ export default defineConfig({
   },
   build: {
     target: "es2020",
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, "index.html"),
+        bench: path.resolve(__dirname, "bench.html"),
+      },
+    },
   },
   base: process.env.NODE_ENV === "production" ? "/cybernohut/" : "/",
 });

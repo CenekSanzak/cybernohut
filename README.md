@@ -68,6 +68,29 @@ impl Op for Reverse {
 }
 ```
 
+## Performance
+
+The engine is not faster than the browser's own built-ins, and the app does not claim
+to be. The [benchmark page](bench.html) runs each pipeline in the engine and with the
+fastest native equivalent, checks that both produce identical bytes, and reports the
+median. One run on a 10 MB input, in a Chromium-based browser on macOS:
+
+| Pipeline | Engine (ms) | Native (ms) | Engine is |
+| --- | ---: | ---: | --- |
+| SHA-256 | 19.5 | 3.8 | 5.1× slower |
+| Base64 encode | 5.3 | 1.0 | 5.3× slower |
+| Base64 decode | 12.3 | 4.3 | 2.9× slower |
+| Hex encode | 5.6 | 3.4 | 1.6× slower |
+| Caesar shift 3 | 19.9 | 18.2 | about the same |
+| Uppercase, then reverse | 16.9 | 63.3 | 3.7× faster |
+| Base64 encode → decode → hex → SHA-256 | 59.7 | 32.9 | 1.8× slower |
+
+Web Crypto and the `Uint8Array` Base64/hex methods are native code, often using CPU
+instructions that WebAssembly cannot reach. What the Rust core buys is one typed
+definition per operation, correct handling of binary data, an engine that runs off the
+main thread and survives running out of memory, and operations the browser does not
+have at all (MD5, Base32, Base85).
+
 ## Getting Started
 
 ### Prerequisites

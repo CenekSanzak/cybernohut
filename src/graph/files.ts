@@ -3,8 +3,12 @@ import { engine } from "@/engine/client";
 import type { GraphAction } from "@/state/graphReducer";
 import { showNotification } from "@/utils/notifications";
 
-/** The engine is 32-bit wasm: a file and what is derived from it must fit in 4 GB. */
-const MAX_FILE_BYTES = 1024 ** 3;
+/**
+ * The engine is 32-bit wasm, so everything it holds must fit in 4 GB: the file, a copy
+ * of it on the page, and every intermediate result, some of which (hex, Base64) are
+ * larger than their input. 256 MB leaves room for a few such steps.
+ */
+const MAX_FILE_BYTES = 256 * 1024 ** 2;
 
 export function formatBytes(bytes: number): string {
   const units = ["B", "KB", "MB", "GB"];
@@ -24,7 +28,10 @@ export async function loadFile(
   dispatch: Dispatch<GraphAction>
 ): Promise<void> {
   if (file.size > MAX_FILE_BYTES) {
-    showNotification(`${file.name} is larger than ${formatBytes(MAX_FILE_BYTES)}`, "error");
+    showNotification(
+      `${file.name} is ${formatBytes(file.size)}; the limit is ${formatBytes(MAX_FILE_BYTES)}`,
+      "error"
+    );
     return;
   }
   try {

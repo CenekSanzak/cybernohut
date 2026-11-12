@@ -8,12 +8,13 @@
 - Typed ports, explicit bytes-to-text conversion, line-by-line mode
 - Save, export, import and share links in one validated format
 - File source nodes for binary input, and downloading any output
+- A benchmark page that compares the engine with browser-native code
 
 ## Next
 
-1. **Measured performance.** A benchmark page that runs fixed pipelines on large inputs
-   and compares them with the equivalent browser-native code. The claim that the wasm
-   engine is faster has not been measured properly yet.
+1. **Close the gap where it is cheap.** The benchmark shows the engine behind the
+   browser's built-ins on hashing and Base64. Candidates: SIMD Base64 and hex, and
+   skipping the copies between steps that only reinterpret data (text to bytes).
 2. **More operations.** XOR, URL encoding, regex extract/replace, number-base
    conversions, magic-byte detection.
 3. **Auto mode.** A search over operations that proposes decoding steps for unknown

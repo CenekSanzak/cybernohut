@@ -151,6 +151,13 @@ export const GraphControls: React.FC<GraphControlsProps> = ({
         <Trash2 size={16} />
         Clear
       </Button>
+
+      <a
+        href="bench.html"
+        className="ml-auto text-sm text-gray-600 underline hover:text-gray-900"
+      >
+        Benchmark
+      </a>
     </div>
   );
 };

@@ -7,25 +7,31 @@
 - Evaluation in a Web Worker, with cancellation and crash recovery
 - Typed ports, explicit bytes-to-text conversion, line-by-line mode
 - Save, export, import and share links in one validated format
-- File source nodes for binary input, and downloading any output
+- File source nodes for binary input, by picker or drag and drop, and downloading any
+  output
 - A benchmark page that compares the engine with browser-native code
-- Auto mode: proposed decoding steps become labelled nodes in the graph
-- 42 operations, including XOR, URL encoding, regex, number bases and file type detection
+- Auto mode: proposed decoding steps become labelled nodes in the graph. It finds
+  layered encodings, compressed data, JSON Web Tokens, letter shifts, and XOR and
+  Vigenère keys, and recognizes prose in languages other than English
+- 57 operations, including AES, HMAC, gzip and zlib, JSON, JWT and timestamps
+- A command-line tool that runs single operations, exported graphs and auto mode
+- A memory budget for results: beyond it, finished results are released and steps
+  rewrite their input in place
 
 ## Next
 
-1. **Share buffers between steps.** Steps that only reinterpret data, such as decoding
-   bytes as UTF-8 text, copy it today. Sharing one buffer would remove that cost, which
-   shows up in the Base64 decode benchmark. SHA-256 stays behind Web Crypto, which has
-   CPU instructions WebAssembly cannot use.
-2. **More operations.** AES and RSA, compression (gzip, zlib), JSON and timestamp
-   helpers, CRC checksums, HMAC.
-3. **A wider auto mode.** It finds layered encodings, letter shifts and single-byte
-   XOR, and judges results by how much they read like English. Next: repeating-key XOR
-   and Vigenère key recovery, compressed data once there are decompression operations,
-   and scoring that is not tied to English.
-4. **Command line.** The engine is a plain Rust crate; a small binary can run a saved
-   graph on a file.
+1. **Key recovery beyond English.** Finding an XOR or Vigenère key uses English letter
+   frequencies, so a ciphertext of text in another language is not solved. Frequency
+   tables for a few more languages would fix the common cases.
+2. **More operations.** RSA and other public-key operations, more compression formats
+   (bzip2, zstd, zip listing), character set conversion, more hashes (SHA-3, BLAKE).
+3. **More steps that work in place.** Only UTF-8 decode, XOR, ROT13 and Caesar take
+   over their input's memory today. Case conversion, Atbash and Vigenère could as well.
+4. **Streaming.** A run holds each step's whole input and output, which is what limits
+   files to 256 MB. Hashes and compression could process their input in pieces.
+5. **Auto mode on truncated data.** Auto mode tries steps on the first 64 KB. A
+   compressed stream cut off there does not decompress, so compressed data in larger
+   inputs is recognized but not followed further.
 
 ## Not planned
 

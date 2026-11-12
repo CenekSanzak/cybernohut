@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A visual toolkit for transforming data: encodings, hashes and classic ciphers, wired together as a graph. Inspired by CyberChef, with the operations and the graph engine written in Rust and compiled to WebAssembly. Everything runs in your browser.
+A visual toolkit for transforming data: encodings, hashes, ciphers and compression, wired together as a graph. Inspired by CyberChef, with the operations and the graph engine written in Rust and compiled to WebAssembly. Everything runs in your browser, and the same Rust core is also a [command-line tool](#command-line).
 
 ## Features
 
@@ -17,23 +17,35 @@ A visual toolkit for transforming data: encodings, hashes and classic ciphers, w
   text adds a visible "Decode Text (UTF-8)" step rather than converting silently.
 - **Runs off the main thread.** Evaluation happens in a Web Worker. A newer run cancels
   the one in flight, and an out-of-memory crash restarts the engine instead of the page.
-- **Auto mode that shows its work.** "Suggest decoding steps" searches for the chain
-  of operations that turns a value into something readable: layered Base64, hex, URL
-  and number encodings, Caesar and ROT13 shifts, single-byte XOR. The answer is added to
-  the graph as ordinary nodes, each labelled with why it was chosen, so it can be read,
-  changed and reused on other input.
-- **Files in, files out.** A file node feeds raw bytes into a graph without going
-  through text, and any output can be downloaded. File content is not saved with the
+- **Auto mode that shows its work.** "Suggest steps" searches for the chain of
+  operations that turns a value into something readable: layered Base64, hex, URL and
+  number encodings, gzip and zlib, JSON Web Tokens, Caesar and ROT13 shifts, and XOR and
+  Vigenère with the key recovered. The answer is added to the graph as ordinary nodes,
+  each labelled with why it was chosen, so it can be read, changed and reused on other
+  input. Readable means prose in any language written with spaces; recovering a cipher
+  key relies on English letter frequencies.
+- **Large inputs.** Up to 512 MB of results are kept so any step's output shows at
+  once. Past that, results no later step needs are released, steps that can work in
+  place reuse their input's memory, and looking at a released step runs the graph again.
+- **Files in, files out.** A file dropped on the canvas becomes a node that feeds its
+  raw bytes into the graph without going through text, and any output can be downloaded. File content is not saved with the
   graph.
 - **Shareable.** A graph is plain data: it is saved locally, exported as JSON, or packed
   into a link.
 
 ### Operations
 
+57 operations:
+
 - **Encoding:** Base64 (standard and URL-safe), Base32, Base85, hexadecimal, URL
   percent-encoding; bytes as binary, octal or decimal numbers
-- **Hashing:** MD5, SHA-1, SHA-256, SHA-512
-- **Ciphers:** XOR with a repeating key, Caesar, ROT13, Atbash, Vigenère
+- **Compression:** gzip, zlib and raw DEFLATE, both ways
+- **Encryption:** AES in CBC, CTR, GCM and ECB with 128, 192 or 256-bit keys; XOR with a
+  repeating key
+- **Hashing:** MD5, SHA-1, SHA-256, SHA-512, HMAC, CRC32
+- **Classic ciphers:** Caesar, ROT13, Atbash, Vigenère
+- **Data formats:** JSON format and minify, JWT decode, Unix timestamps to and from
+  ISO 8601
 - **Text:** regex extract and replace, reverse, case conversion, slice, split, join,
   concatenate, word count, statistics, UTF-8 decoding
 - **Analysis:** file type detection from signature bytes, Shannon entropy
@@ -52,6 +64,8 @@ wasm/src/api     the wasm boundary: catalog(), evaluate(), suggest(), output_tex
 src/engine       the generated types, the worker and the page's client for it
 src/graph        the graph as data, persistence, and the evaluation hooks
 src/components   the React UI, driven entirely by the catalog
+src/nodes        what a node shows: ports, settings form, result
+cli              the command-line tool, a thin layer over the wasm crate built natively
 ```
 
 ### Adding an operation
@@ -90,19 +104,53 @@ Chromium-based browser on macOS:
 
 | Pipeline | Engine (ms) | Native (ms) | Engine is |
 | --- | ---: | ---: | --- |
-| SHA-256 | 18.9 | 3.8 | 5.0× slower |
-| Base64 encode | 1.6 | 1.0 | 1.6× slower |
-| Base64 decode | 7.6 | 4.5 | 1.7× slower |
-| Hex encode | 0.6 | 3.4 | 5.7× faster |
-| Caesar shift 3 | 5.4 | 16.8 | 3.1× faster |
-| Uppercase, then reverse | 14.1 | 64.1 | 4.5× faster |
-| Base64 encode → decode → hex → SHA-256 | 47.4 | 30.6 | 1.5× slower |
+| SHA-256 | 18.6 | 3.8 | 4.9× slower |
+| Base64 encode | 1.3 | 1.1 | 1.2× slower |
+| Base64 decode | 7.5 | 4.1 | 1.8× slower |
+| Hex encode | 0.7 | 3.7 | 5.3× faster |
+| Caesar shift 3 | 5.4 | 13.9 | 2.6× faster |
+| Uppercase, then reverse | 13.7 | 65.4 | 4.8× faster |
+| Base64 encode → decode → hex → SHA-256 | 46.0 | 29.5 | 1.6× slower |
 
 SHA-256 in Web Crypto uses dedicated CPU instructions that WebAssembly cannot reach,
 and it dominates the chained pipeline. Base64 and hex use WebAssembly SIMD. Beyond
 speed, the Rust core gives one typed definition per operation, correct handling of
 binary data, an engine that runs off the main thread and survives running out of
 memory, and operations the browser does not have at all (MD5, Base32, Base85, XOR, the classic ciphers).
+
+## Command line
+
+The operations, the graph engine and auto mode are a plain Rust crate, so the same code
+that runs in the browser as WebAssembly also builds into a native binary:
+
+```bash
+cargo install --path cli
+```
+
+One operation is a filter, with its settings as options:
+
+```bash
+echo 'hello' | cybernohut base64-standard-encode
+cybernohut sha256 -i photo.jpg
+cybernohut aes-decrypt --mode gcm --key-format hex --key 00112233445566778899aabbccddeeff --iv 000000000000000000000000 -i secret.bin
+```
+
+Auto mode explains what it found, applies it, or writes it as a graph:
+
+```bash
+cybernohut auto -i mystery.txt            # the suggested steps and why
+cybernohut auto --apply -i mystery.txt    # the decoded result
+cybernohut auto --graph -i mystery.txt > steps.json
+```
+
+A graph, whether written by `auto --graph` or exported from the web app, runs on other
+data, which makes a decoding worked out once repeatable:
+
+```bash
+cybernohut run steps.json -i other.txt
+```
+
+`cybernohut list` shows every operation and `cybernohut help <operation>` its settings.
 
 ## Getting Started
 
@@ -134,8 +182,9 @@ npm run dev
 npm run build
 ```
 
-Rebuild the wasm module with `wasm-pack build wasm` after changing Rust code, and run
-the engine's tests with `cargo test --manifest-path wasm/Cargo.toml`.
+Rebuild the wasm module with `wasm-pack build wasm` after changing Rust code. The
+engine's tests run with `cargo test --manifest-path wasm/Cargo.toml` and the command-line
+tool's with `cargo test --manifest-path cli/Cargo.toml`.
 
 ## Tech Stack
 

@@ -1,0 +1,19 @@
+[package]
+name = "cybernohut-cli"
+version = "0.1.0"
+edition = "2021"
+description = "The cybernohut operations and graph engine on the command line"
+
+[[bin]]
+name = "cybernohut"
+path = "src/main.rs"
+
+[dependencies]
+# The same crate the web app compiles to WebAssembly, built natively.
+wasm = { path = "../wasm", default-features = false }
+serde_json = { version = "1.0.138", features = ["preserve_order", "arbitrary_precision"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

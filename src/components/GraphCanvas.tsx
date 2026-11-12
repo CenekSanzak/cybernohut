@@ -6,7 +6,6 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
-  useNodesInitialized,
   useReactFlow,
   type Connection,
   type Edge,
@@ -42,18 +41,16 @@ const Canvas = ({ nodes, edges }: GraphCanvasProps) => {
   // Several nodes arriving at once (a proposed chain, an imported graph) usually land
   // partly outside the view, so the view follows them. A single new node is left
   // alone: moving the view on every click would be disorienting.
-  const initialized = useNodesInitialized();
   const previousCount = useRef(nodes.length);
   const fitPending = useRef(false);
   useEffect(() => {
     if (nodes.length - previousCount.current >= 2) fitPending.current = true;
     previousCount.current = nodes.length;
-    // New nodes can only be fitted once they have been measured.
-    if (fitPending.current && initialized) {
-      fitPending.current = false;
-      void fitView(FIT);
-    }
-  }, [nodes.length, initialized, fitView]);
+    // New nodes can only be fitted once every one of them has been measured.
+    if (!fitPending.current || !nodes.every((node) => node.measured?.height)) return;
+    fitPending.current = false;
+    requestAnimationFrame(() => void fitView(FIT));
+  }, [nodes, fitView]);
 
   const handleDrop = (event: React.DragEvent) => {
     if (!carriesFiles(event)) return;

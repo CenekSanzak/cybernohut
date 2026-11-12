@@ -77,13 +77,13 @@ median. One run on a 10 MB input, in a Chromium-based browser on macOS:
 
 | Pipeline | Engine (ms) | Native (ms) | Engine is |
 | --- | ---: | ---: | --- |
-| SHA-256 | 19.5 | 3.8 | 5.1× slower |
-| Base64 encode | 5.3 | 1.0 | 5.3× slower |
-| Base64 decode | 12.3 | 4.3 | 2.9× slower |
-| Hex encode | 5.6 | 3.4 | 1.6× slower |
-| Caesar shift 3 | 19.9 | 18.2 | about the same |
-| Uppercase, then reverse | 16.9 | 63.3 | 3.7× faster |
-| Base64 encode → decode → hex → SHA-256 | 59.7 | 32.9 | 1.8× slower |
+| SHA-256 | 19.3 | 3.8 | 5.1× slower |
+| Base64 encode | 5.3 | 0.9 | 5.9× slower |
+| Base64 decode | 12.2 | 4.4 | 2.8× slower |
+| Hex encode | 6.0 | 3.2 | 1.9× slower |
+| Caesar shift 3 | 19.7 | 16.5 | 1.2× slower |
+| Uppercase, then reverse | 16.8 | 62.9 | 3.7× faster |
+| Base64 encode → decode → hex → SHA-256 | 60.2 | 32.0 | 1.9× slower |
 
 Web Crypto and the `Uint8Array` Base64/hex methods are native code, often using CPU
 instructions that WebAssembly cannot reach. What the Rust core buys is one typed

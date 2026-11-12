@@ -29,17 +29,21 @@ A modern, visual toolkit for data transformation, encoding, encryption and CTF c
 
 ### Prerequisites
 
-- Node.js (v18 or higher recommended)
-- npm or yarn
+- Node.js (v20 or higher recommended)
+- [Rust](https://www.rust-lang.org/tools/install) (stable) with the `wasm32-unknown-unknown` target
+- [wasm-pack](https://github.com/rustwasm/wasm-pack)
 
 ### Installation
 
+The WebAssembly package has to be built before installing the npm dependencies, because the app depends on `wasm/pkg`.
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/cyber-nohut.git
+git clone https://github.com/CenekSanzak/cybernohut.git
+cd cybernohut
 
-# Navigate to project directory
-cd cyber-nohut
+# Build the wasm module (creates wasm/pkg)
+wasm-pack build wasm
 
 # Install dependencies
 npm install
@@ -49,26 +53,6 @@ npm run dev
 
 # Build for production
 npm run build
-```
-
-### Building the Rust WebAssembly Part
-
-You need to have [Rust](https://www.rust-lang.org/tools/install) installed.
-
-```bash
-
-# Install wasm-pack
-cargo install wasm-pack
-
-# Go to wasm directory
-cd wasm
-
-# Build the wasm module (No target because the default is loader (like webpack))
-wasm-pack build 
-
-# Go back to the root directory
-cd ..
-
 ```
 
 ## Tech Stack
